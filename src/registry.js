@@ -70,6 +70,9 @@ export function discoverPlugins(options = {}) {
       manifest: pkg.dsh,
       level: adapter.level,
       capabilities: adapter.capabilities,
+      profiles: adapter.profiles ?? [],
+      roles: adapter.roles ?? [],
+      contract: adapter.contract,
       prompts: adapter.prompts,
       skills: adapter.skills,
       warnings: adapter.warnings,
@@ -111,6 +114,13 @@ export class PluginRegistry {
     })))
   }
 
+  profiles() {
+    return this.plugins.flatMap((plugin) => (plugin.profiles ?? []).map((profile) => ({
+      ...profile,
+      plugin: plugin.name,
+    })))
+  }
+
   tools() {
     return this.capabilities()
       .filter((capability) => capability.bind?.tool)
@@ -145,7 +155,10 @@ export class PluginRegistry {
       native: this.plugins.filter((plugin) => plugin.level === 'native').length,
       legacy: this.plugins.filter((plugin) => plugin.level === 'legacy-tools').length,
       knowledge: this.plugins.filter((plugin) => plugin.level === 'knowledge-only').length,
+      profile: this.plugins.filter((plugin) => plugin.level === 'profile').length,
       unknown: this.plugins.filter((plugin) => plugin.level === 'unknown').length,
+      profiles: this.profiles().length,
+      clients: this.plugins.filter((plugin) => (plugin.roles ?? []).includes('client')).length,
     }
   }
 }

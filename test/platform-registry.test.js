@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict'
+﻿import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -59,8 +59,11 @@ test('registry resolves tools, capabilities, prompts and stats', () => {
     assert.equal(registry.forTool('draw_picture').id, 'action.draw-picture')
     assert.equal(registry.forTool('missing'), undefined)
     assert.equal(registry.prompts().length, 1)
-    assert.deepEqual(registry.describe(), { plugins: 3, native: 1, legacy: 1, knowledge: 1, unknown: 0 })
+    assert.deepEqual(registry.describe(), { plugins: 3, native: 1, legacy: 1, knowledge: 1,
+      profile: 0, unknown: 0, profiles: 0, clients: 0 })
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }
 })
+
+

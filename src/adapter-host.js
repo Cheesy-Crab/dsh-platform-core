@@ -5,9 +5,10 @@ import { forwardMediaOutputs } from './delivery.js'
  * context and never import the platform or session implementations directly.
  */
 export class AdapterHost {
-  constructor({ ctx, registry, log = () => {} }) {
+  constructor({ ctx, registry, profiles, log = () => {} }) {
     this.ctx = ctx
     this.registry = registry
+    this.profiles = profiles
     this.log = log
     this.instances = []
   }
@@ -43,6 +44,8 @@ export class AdapterHost {
       root: options.root,
       log: this.log,
       extensions: this.registry,
+      profiles: this.profiles,
+      resolveProfile: (id) => this.profiles?.resolve?.(id),
       createSessionManager: (managerOptions) => sessionService.createManager(managerOptions),
       createUserStore: (storeOptions) => accessService.createStore(storeOptions),
       resolveWorkspacesRoot: (raw) => sessionService.resolveWorkspacesRoot(raw),

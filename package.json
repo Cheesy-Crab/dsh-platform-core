@@ -1,6 +1,6 @@
-{
+﻿{
   "name": "@dsh/platform-core",
-  "version": "0.43.3",
+  "version": "0.44.0",
   "description": "Surface-neutral DSH platform core: capability registry, plugin adapter, prompt policy and media delivery.",
   "type": "module",
   "main": "./src/index.js",
@@ -10,6 +10,8 @@
     "./events": "./src/events.js",
     "./delivery": "./src/delivery.js",
     "./adapter-host": "./src/adapter-host.js",
+    "./profiles": "./src/profiles.js",
+    "./manifest": "./src/manifest.js",
     "./plugin-adapter": "./src/plugin-adapter.js",
     "./registry": "./src/registry.js",
     "./prompts": "./src/prompts/index.js"
@@ -39,21 +41,26 @@
     "bundle": {
       "patch": "./cordis.patch.yml"
     },
-    "pluginApi": "1.1",
-    "capabilities": [
-      {
-        "id": "platform.core",
-        "kind": "knowledge",
-        "title": "Platform Core",
-        "description": "Surface-neutral platform runtime: capability registry, plugin discovery, prompt policy and media delivery."
-      }
-    ]
+    "platform": {
+      "contract": "1.2",
+      "capabilities": [
+        {
+          "id": "platform.core",
+          "kind": "knowledge",
+          "title": "Platform Core",
+          "description": "Surface-neutral platform runtime: capability registry, plugin discovery, prompt policy and media delivery."
+        }
+      ],
+      "profiles": []
+    }
   },
   "scripts": {
     "test": "node --test --test-force-exit"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22",
+    "dsh": ">=0.2.1-rc.2"
   },
   "license": "MIT"
 }
+

@@ -1,3 +1,5 @@
+import { readPlatformManifest } from './manifest.js'
+
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp)$/i
 
 function list(value) {
@@ -104,17 +106,21 @@ function inferCapability(tool, defaults) {
  * @param {{ pluginId?: string }} [options]
  */
 export function classifyPlugin(manifest, options = {}) {
-  const dsh = manifest?.dsh && typeof manifest.dsh === 'object' ? manifest.dsh : (manifest ?? {})
-  const pluginId = options.pluginId ?? dsh.name ?? 'unknown'
+  const dsh = readPlatformManifest(manifest)
+  const pluginId = options.pluginId ?? manifest?.name ?? 'unknown'
   const warnings = []
   const prompts = list(dsh.prompts)
   const skills = list(dsh.skills)
+  const profiles = list(dsh.profiles)
 
   if (Array.isArray(dsh.capabilities) && dsh.capabilities.length > 0) {
     return {
       pluginId,
       level: 'native',
       capabilities: dsh.capabilities.map((capability) => ({ ...capability, inferred: false })),
+      profiles,
+      roles: dsh.roles,
+      contract: dsh.contract,
       prompts,
       skills,
       warnings,
@@ -123,6 +129,21 @@ export function classifyPlugin(manifest, options = {}) {
   }
 
   const tools = list(dsh.tools)
+  if (profiles.length > 0 && dsh.capabilities.length === 0) {
+    return {
+      pluginId,
+      level: 'profile',
+      capabilities: [],
+      profiles,
+      roles: dsh.roles,
+      contract: dsh.contract,
+      prompts,
+      skills,
+      warnings,
+      requiresReview: false,
+    }
+  }
+
   if (tools.length > 0) {
     const capabilities = tools.map((tool) => inferCapability(tool, dsh))
     const review = capabilities.some((capability) => capability.requiresReview)
@@ -131,6 +152,9 @@ export function classifyPlugin(manifest, options = {}) {
       pluginId,
       level: 'legacy-tools',
       capabilities,
+      profiles,
+      roles: dsh.roles,
+      contract: dsh.contract,
       prompts,
       skills,
       warnings,
@@ -142,6 +166,9 @@ export function classifyPlugin(manifest, options = {}) {
     return {
       pluginId,
       level: 'knowledge-only',
+      profiles,
+      roles: dsh.roles,
+      contract: dsh.contract,
       capabilities: [{
         id: `knowledge.${slug(pluginId)}`,
         kind: 'knowledge',
@@ -162,6 +189,9 @@ export function classifyPlugin(manifest, options = {}) {
     pluginId,
     level: 'unknown',
     capabilities: [],
+    profiles,
+    roles: dsh.roles,
+    contract: dsh.contract,
     prompts: [],
     skills: [],
     warnings,

@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict'
+﻿import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -32,10 +32,14 @@ test('platform core is itself a loadable plugin with generic prompts', () => {
       native: 0,
       legacy: 0,
       knowledge: 0,
+      profile: 0,
       unknown: 0,
+      profiles: 0,
+      clients: 0,
     })
   } finally {
     for (const cleanup of cleanups) cleanup()
     fs.rmSync(profile, { recursive: true, force: true })
   }
 })
+
