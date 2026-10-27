@@ -71,7 +71,7 @@ export function apply(ctx, rawConfig = {}) {
   try {
     pluginRegistry = new PluginRegistry(discoverPlugins({
       profileDir,
-      ignore: ['@dsh/platform-core', 'dsh-qq-bridge'],
+      ignore: ['@dsh/platform-core', '@dsh/session-core', 'dsh-qq-bridge'],
     }))
     log('info', `discovered ${pluginRegistry.list().length} plugin(s) from ${profileDir}`)
   } catch (error) {
