@@ -2,7 +2,7 @@
  * Generic tool failure policy. It does not name a plugin or a provider.
  */
 export function installToolFailurePrompt(agent, state, log) {
-  if (state.toolFailurePromptInstalled) return
+  if (state.toolFailurePromptInstalled || agent?.__platformToolFailureInstalled) return
   try {
     agent.ctx.systemPrompt.section({
       name: 'platform:tool-failures',
@@ -17,6 +17,7 @@ export function installToolFailurePrompt(agent, state, log) {
       ].join(''),
     })
     state.toolFailurePromptInstalled = true
+    agent.__platformToolFailureInstalled = true
   } catch (error) {
     log?.('warn', `could not add tool failure prompt: ${error?.message ?? error}`)
   }

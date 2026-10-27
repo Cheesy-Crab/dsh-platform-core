@@ -3,7 +3,7 @@
  * image-generation tool; capability skills provide tool-specific details.
  */
 export function installCreativePrompt(agent, state, log) {
-  if (state.creativePromptInstalled) return
+  if (state.creativePromptInstalled || agent?.__platformCreativeInstalled) return
   try {
     agent.ctx.systemPrompt.section({
       name: 'platform:creative',
@@ -19,6 +19,7 @@ export function installCreativePrompt(agent, state, log) {
       ].join(''),
     })
     state.creativePromptInstalled = true
+    agent.__platformCreativeInstalled = true
   } catch (error) {
     log?.('warn', `could not add creative prompt: ${error?.message ?? error}`)
   }

@@ -68,6 +68,18 @@ export function apply(ctx, rawConfig = {}) {
     log('warn', `could not register platform prompts: ${error?.message ?? error}`)
   }
 
+  try {
+    const offCreated = ctx.on?.('agent/created', ({ agent }) => {
+      if (!agent) return
+      const state = agent.__platformState ?? (agent.__platformState = {})
+      installToolFailurePrompt(agent, state, log)
+      installCreativePrompt(agent, state, log)
+    })
+    if (typeof offCreated === 'function') disposers.push(offCreated)
+  } catch (error) {
+    log('warn', `could not subscribe to agent/created: ${error?.message ?? error}`)
+  }
+
   const profileDir = rawConfig.profileDir ?? defaultProfileDir()
   let pluginRegistry
   try {
