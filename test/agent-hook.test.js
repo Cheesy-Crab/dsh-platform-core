@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict'
+﻿import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -37,7 +37,7 @@ function fakeAgent(sections, meta = {}) {
   }
 }
 
-test('agent/created honors profile prompt and capability policy', () => {
+test('agent/created honors profile prompt and capability policy', async () => {
   const profile = tempProfile()
   const services = new Map()
   let created
@@ -56,7 +56,7 @@ test('agent/created honors profile prompt and capability policy', () => {
     },
   }
   try {
-    apply(ctx, { profileDir: profile })
+    await apply(ctx, { profileDir: profile })
     assert.equal(typeof created, 'function')
 
     const tavern = []
@@ -77,3 +77,4 @@ test('agent/created honors profile prompt and capability policy', () => {
     fs.rmSync(profile, { recursive: true, force: true })
   }
 })
+

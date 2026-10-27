@@ -40,14 +40,67 @@ function packageDirectories(nodeModules) {
   return out
 }
 
+function normalizeInventory(value) {
+  if (Array.isArray(value)) return value
+  if (value && Array.isArray(value.entries)) return value.entries
+  return undefined
+}
+
+function pluginRecord(dir, pkg) {
+  const validation = validatePlatformManifest(pkg)
+  const adapter = createPluginAdapter(pkg, { pluginId: pkg.name, validation })
+  return {
+    name: pkg.name,
+    version: pkg.version,
+    dir,
+    manifest: pkg.dsh,
+    level: adapter.level,
+    capabilities: adapter.capabilities,
+    profiles: adapter.profiles ?? [],
+    roles: adapter.roles ?? [],
+    contract: adapter.contract,
+    prompts: adapter.prompts,
+    skills: adapter.skills,
+    warnings: adapter.warnings,
+    requiresReview: adapter.requiresReview,
+    validation,
+    adapter,
+  }
+}
+
+function discoverFromInventory(options, inventory) {
+  const profileDir = options.profileDir
+  if (!profileDir) return []
+  const nodeModules = path.join(profileDir, 'node_modules')
+  const ignore = new Set(options.ignore ?? [])
+  const found = new Map()
+  for (const entry of inventory) {
+    if (!entry || entry.enabled === false) continue
+    if (entry.fiberPhase === 'failed' || entry.fiberPhase === 'disposed') continue
+    const name = entry.moduleName ?? entry.name
+    if (typeof name !== 'string' || name.length === 0) continue
+    if (ignore.has(name) || found.has(name)) continue
+    const dir = path.join(nodeModules, ...name.split('/'))
+    const pkg = readJson(path.join(dir, 'package.json'))
+    if (!pkg?.name || !pkg?.dsh) continue
+    found.set(pkg.name, pluginRecord(dir, pkg))
+  }
+  return [...found.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
 /**
  * Discover installed DSH plugins from a profile's node_modules and optional
  * extra package directories. Only packages with a `dsh` manifest are
  * considered; each is classified without running plugin code.
  *
- * @param {{ profileDir?: string, extraDirs?: string[], ignore?: string[] }} [options]
+ * When `inventory` is supplied (the DSH `pluginInventory` snapshot), only the
+ * enabled entries in that snapshot are read; directory scanning is skipped.
+ *
+ * @param {{ profileDir?: string, extraDirs?: string[], ignore?: string[], inventory?: unknown }} [options]
  */
 export function discoverPlugins(options = {}) {
+  const inventory = normalizeInventory(options.inventory)
+  if (inventory !== undefined) return discoverFromInventory(options, inventory)
   const nodeModules = options.profileDir
     ? path.join(options.profileDir, 'node_modules')
     : undefined
@@ -63,27 +116,8 @@ export function discoverPlugins(options = {}) {
     if (!pkg?.name || !pkg?.dsh) continue
     if (ignore.has(pkg.name)) continue
     if (found.has(pkg.name)) continue
-    const validation = validatePlatformManifest(pkg)
-    const adapter = createPluginAdapter(pkg, { pluginId: pkg.name, validation })
-    found.set(pkg.name, {
-      name: pkg.name,
-      version: pkg.version,
-      dir,
-      manifest: pkg.dsh,
-      level: adapter.level,
-      capabilities: adapter.capabilities,
-      profiles: adapter.profiles ?? [],
-      roles: adapter.roles ?? [],
-      contract: adapter.contract,
-      prompts: adapter.prompts,
-      skills: adapter.skills,
-      warnings: adapter.warnings,
-      requiresReview: adapter.requiresReview,
-      validation,
-      adapter,
-    })
+    found.set(pkg.name, pluginRecord(dir, pkg))
   }
-
   return [...found.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
 

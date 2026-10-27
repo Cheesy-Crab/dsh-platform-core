@@ -323,6 +323,18 @@ export class InvocationLedger {
     return outcome
   }
 
+  stats() {
+    const counts = { in_flight: 0, completed: 0, failed: 0 }
+    for (const entry of this.entries.values()) {
+      if (counts[entry.state] !== undefined) counts[entry.state] += 1
+    }
+    return {
+      total: this.entries.size,
+      capabilities: this.capabilities.size,
+      ...counts,
+    }
+  }
+
   /**
    * Inspect a key without changing it.
    *

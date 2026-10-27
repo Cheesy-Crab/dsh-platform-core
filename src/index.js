@@ -5,6 +5,7 @@ import { AgentExtensionRegistry } from './agent-registry.js'
 import { AdapterHost } from './adapter-host.js'
 import { DeliveryCoordinator } from './delivery-coordinator.js'
 import { InvocationLedger } from './invocation-ledger.js'
+import { createPlatformStatus } from './status.js'
 import { isPrimaryAgent, platformPromptAllowed, profileCapabilitiesMode, profileForAgent } from './agent-policy.js'
 import { ProfileRegistry } from './profiles.js'
 import { discoverPlugins, PluginRegistry } from './registry.js'
@@ -21,6 +22,7 @@ export { discoverPlugins, PluginRegistry } from './registry.js'
 export { forwardMediaOutputs, generatedImageRecords, generatedImages } from './delivery.js'
 export { DeliveryCoordinator } from './delivery-coordinator.js'
 export { InvocationLedger } from './invocation-ledger.js'
+export { createPlatformStatus } from './status.js'
 export { installCreativePrompt } from './prompts/creative.prompt.js'
 export { installToolFailurePrompt } from './prompts/tool-failures.prompt.js'
 
@@ -36,7 +38,7 @@ function defaultProfileDir() {
  * agent-extension registry, installs generic prompts, and exposes discovered
  * plugins. It never imports QQ, NapCat or OneBot.
  */
-export function apply(ctx, rawConfig = {}) {
+export async function apply(ctx, rawConfig = {}) {
   const log = (level, message) => {
     const line = `[platform-core] ${message}`
     try {
@@ -78,10 +80,21 @@ export function apply(ctx, rawConfig = {}) {
   }
 
   const profileDir = rawConfig.profileDir ?? defaultProfileDir()
+  let pluginInventory
+  try {
+    const service = ctx.get?.('pluginInventory')
+    if (service && typeof service.list === 'function') {
+      pluginInventory = await service.list()
+      log('info', `plugin inventory: ${pluginInventory?.entries?.length ?? 0} entries`)
+    }
+  } catch (error) {
+    log('warn', `could not read plugin inventory: ${error?.message ?? error}`)
+  }
   let pluginRegistry
   try {
     pluginRegistry = new PluginRegistry(discoverPlugins({
       profileDir,
+      inventory: pluginInventory,
       ignore: ['@dsh/platform-core', '@dsh/session-core', 'dsh-qq-bridge'],
     }))
     log('info', `discovered ${pluginRegistry.list().length} plugin(s) from ${profileDir}`)
@@ -138,8 +151,14 @@ export function apply(ctx, rawConfig = {}) {
   const adapterHost = new AdapterHost({ ctx, registry, profiles: profileRegistry, deliveryCoordinator, invocationLedger, log })
   try {
     ctx.provide('adapterHost', adapterHost)
+    ctx.provide('platformStatus', createPlatformStatus({
+      pluginRegistry,
+      profileRegistry,
+      deliveryCoordinator,
+      invocationLedger,
+    }))
   } catch (error) {
-    log('warn', `could not provide adapterHost: ${error?.message ?? error}`)
+    log('warn', `could not provide adapterHost/status: ${error?.message ?? error}`)
   }
 
   ctx.effect?.(() => () => {

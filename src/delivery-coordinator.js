@@ -189,6 +189,14 @@ export class DeliveryCoordinator {
    *   included); `unknown` means no attempt is recorded, or an identifier is
    *   missing (then `key` is null).
    */
+  stats() {
+    const counts = { pending: 0, delivered: 0, failed: 0 }
+    for (const record of this.deliveries.values()) {
+      if (counts[record.state] !== undefined) counts[record.state] += 1
+    }
+    return { total: this.deliveries.size, ...counts }
+  }
+
   status({ sessionId, turnId, surface, outputId } = {}) {
     const sid = normalizeId(sessionId)
     const tid = normalizeId(turnId)
