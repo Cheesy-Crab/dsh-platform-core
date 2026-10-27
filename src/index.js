@@ -2,11 +2,13 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { AgentExtensionRegistry } from './agent-registry.js'
+import { AdapterHost } from './adapter-host.js'
 import { discoverPlugins, PluginRegistry } from './registry.js'
 import { installCreativePrompt } from './prompts/creative.prompt.js'
 import { installToolFailurePrompt } from './prompts/tool-failures.prompt.js'
 
 export { AgentExtensionRegistry } from './agent-registry.js'
+export { AdapterHost } from './adapter-host.js'
 export { createPluginAdapter, classifyPlugin, adaptToolResult } from './plugin-adapter.js'
 export { discoverPlugins, PluginRegistry } from './registry.js'
 export { forwardMediaOutputs, generatedImageRecords, generatedImages } from './delivery.js'
@@ -84,7 +86,15 @@ export function apply(ctx, rawConfig = {}) {
     log('warn', `could not provide pluginRegistry: ${error?.message ?? error}`)
   }
 
+  const adapterHost = new AdapterHost({ ctx, registry, log })
+  try {
+    ctx.provide('adapterHost', adapterHost)
+  } catch (error) {
+    log('warn', `could not provide adapterHost: ${error?.message ?? error}`)
+  }
+
   ctx.effect?.(() => () => {
+    adapterHost.dispose()
     for (const dispose of disposers.splice(0)) {
       try { dispose() } catch {}
     }
