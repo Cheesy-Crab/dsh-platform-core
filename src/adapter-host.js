@@ -5,10 +5,12 @@ import { forwardMediaOutputs } from './delivery.js'
  * context and never import the platform or session implementations directly.
  */
 export class AdapterHost {
-  constructor({ ctx, registry, profiles, log = () => {} }) {
+  constructor({ ctx, registry, profiles, deliveryCoordinator, invocationLedger, log = () => {} }) {
     this.ctx = ctx
     this.registry = registry
     this.profiles = profiles
+    this.deliveryCoordinator = deliveryCoordinator
+    this.invocationLedger = invocationLedger
     this.log = log
     this.instances = []
   }
@@ -46,6 +48,8 @@ export class AdapterHost {
       extensions: this.registry,
       profiles: this.profiles,
       resolveProfile: (id) => this.profiles?.resolve?.(id),
+      deliveryCoordinator: this.deliveryCoordinator,
+      invocationLedger: this.invocationLedger,
       createSessionManager: (managerOptions) => sessionService.createManager(managerOptions),
       createUserStore: (storeOptions) => accessService.createStore(storeOptions),
       resolveWorkspacesRoot: (raw) => sessionService.resolveWorkspacesRoot(raw),
@@ -56,7 +60,10 @@ export class AdapterHost {
         toolAllowed: (tool, capabilities) => accessService.toolAllowed(tool, capabilities),
       },
       registerExtensions: (extensions) => extensions.map((extension) => this.registry.register(extension)),
-      forwardMediaOutputs: (mediaOptions) => forwardMediaOutputs(mediaOptions),
+      forwardMediaOutputs: (mediaOptions) => forwardMediaOutputs({
+        ...mediaOptions,
+        deliveryCoordinator: mediaOptions.deliveryCoordinator ?? this.deliveryCoordinator,
+      }),
     }
     const instance = adapter.mount(host)
     this.instances.push({ adapter, instance })

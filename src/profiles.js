@@ -5,7 +5,35 @@
 export class ProfileRegistry {
   constructor(profiles = []) {
     this.profiles = []
+    this.providers = new Map()
     for (const profile of profiles) this.add(profile)
+  }
+
+  registerProvider(provider) {
+    if (!provider || typeof provider.id !== 'string' || provider.id.length === 0) {
+      throw new Error('profile provider id is required')
+    }
+    if (typeof provider.bind !== 'function') {
+      throw new Error(`profile provider ${provider.id} must implement bind()`)
+    }
+    this.providers.set(provider.id, provider)
+    if (provider.profile) this.add({ ...provider.profile, id: provider.id })
+    return provider
+  }
+
+  providerFor(id) {
+    return this.providers.get(id)
+  }
+
+  providersList() {
+    return [...this.providers.values()]
+  }
+
+  async bind(id, context = {}) {
+    const provider = this.providerFor(id)
+    if (!provider) return { ok: false, reason: 'provider_missing' }
+    await provider.bind({ ...context, profileId: id })
+    return { ok: true }
   }
 
   add(profile) {

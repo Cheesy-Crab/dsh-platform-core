@@ -68,29 +68,55 @@ export async function forwardMediaOutputs({
   optionsForChat,
   presentedFor,
   archive,
+  deliveryCoordinator,
+  sessionId,
+  turnId,
+  surface,
 }) {
   const records = generatedImageRecords(session, fromSeq, log)
   const presented = new Set(presentedFor?.(session, fromSeq, log) ?? [])
   const sent = []
+  const resolvedSessionId = sessionId ?? session?.header?.id ?? session?.id ?? 'unknown'
+  const resolvedTurnId = turnId ?? fromSeq ?? 'turn'
+  const resolvedSurface = surface ?? chat?.type ?? 'default'
   for (const record of records) {
+    if (presented.has(record.file)) continue
     const options = optionsForChat?.(chat) ?? {}
     let billing
-    const cost = record.cost?.total
-    if (typeof cost === 'number' && cost > 0 && charge) {
-      try {
-        billing = await charge({ chat, state, cost })
-      } catch (error) {
-        log?.('warn', `could not charge image quota: ${error?.message ?? error}`)
+    const deliver = async () => {
+      const cost = record.cost?.total
+      if (typeof cost === 'number' && cost > 0 && charge) {
+        try {
+          billing = await charge({ chat, state, cost })
+        } catch (error) {
+          log?.('warn', `could not charge image quota: ${error?.message ?? error}`)
+        }
       }
+      const file = archive ? await archive(record.file, { session, state, log }) : record.file
+      await sendImage?.(chat, file, options)
+      return file
     }
-    if (!presented.has(record.file)) {
-      try {
-        const file = archive ? await archive(record.file, { session, state, log }) : record.file
-        await sendImage?.(chat, file, options)
-        sent.push(file)
-      } catch (error) {
-        log?.('warn', `could not forward generated image ${record.file}: ${error?.message ?? error}`)
+
+    let file
+    try {
+      if (deliveryCoordinator) {
+        const result = await deliveryCoordinator.deliver({
+          sessionId: resolvedSessionId,
+          turnId: resolvedTurnId,
+          surface: resolvedSurface,
+          target: chat,
+          output: { path: record.file },
+          send: async () => deliver(),
+        })
+        if (result?.skipped) continue
+        file = result?.result
+      } else {
+        file = await deliver()
       }
+      sent.push(file)
+    } catch (error) {
+      log?.('warn', `could not forward generated image ${record.file}: ${error?.message ?? error}`)
+      continue
     }
     if (billing && sendText) {
       const suffix = billing.overdraw ? '（额度已用尽）' : ''

@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { createPluginAdapter } from './plugin-adapter.js'
+import { validatePlatformManifest } from './manifest.js'
 
 function readJson(file) {
   try {
@@ -62,7 +63,8 @@ export function discoverPlugins(options = {}) {
     if (!pkg?.name || !pkg?.dsh) continue
     if (ignore.has(pkg.name)) continue
     if (found.has(pkg.name)) continue
-    const adapter = createPluginAdapter(pkg, { pluginId: pkg.name })
+    const validation = validatePlatformManifest(pkg)
+    const adapter = createPluginAdapter(pkg, { pluginId: pkg.name, validation })
     found.set(pkg.name, {
       name: pkg.name,
       version: pkg.version,
@@ -77,6 +79,7 @@ export function discoverPlugins(options = {}) {
       skills: adapter.skills,
       warnings: adapter.warnings,
       requiresReview: adapter.requiresReview,
+      validation,
       adapter,
     })
   }

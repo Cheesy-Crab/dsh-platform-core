@@ -1,4 +1,4 @@
-import { readPlatformManifest } from './manifest.js'
+import { readPlatformManifest, validatePlatformManifest } from './manifest.js'
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|bmp)$/i
 
@@ -103,15 +103,33 @@ function inferCapability(tool, defaults) {
  * require a human review before they are trusted.
  *
  * @param {any} manifest package.json's dsh object, or an object with `dsh`.
- * @param {{ pluginId?: string }} [options]
+ * @param {{ pluginId?: string, validation?: ReturnType<typeof validatePlatformManifest> }} [options]
  */
 export function classifyPlugin(manifest, options = {}) {
   const dsh = readPlatformManifest(manifest)
   const pluginId = options.pluginId ?? manifest?.name ?? 'unknown'
-  const warnings = []
+  const validation = options.validation ?? validatePlatformManifest(manifest)
+  const warnings = [...validation.warnings]
   const prompts = list(dsh.prompts)
   const skills = list(dsh.skills)
   const profiles = list(dsh.profiles)
+
+  if (!validation.ok) {
+    for (const error of validation.errors) warnings.push(`manifest contract rejected: ${error}`)
+    return {
+      pluginId,
+      level: 'unknown',
+      capabilities: [],
+      profiles: [],
+      roles: [],
+      contract: validation.contract,
+      prompts: [],
+      skills: [],
+      warnings,
+      requiresReview: true,
+      validation,
+    }
+  }
 
   if (Array.isArray(dsh.capabilities) && dsh.capabilities.length > 0) {
     return {
@@ -125,6 +143,7 @@ export function classifyPlugin(manifest, options = {}) {
       skills,
       warnings,
       requiresReview: false,
+      validation,
     }
   }
 
@@ -141,6 +160,7 @@ export function classifyPlugin(manifest, options = {}) {
       skills,
       warnings,
       requiresReview: false,
+      validation,
     }
   }
 
@@ -159,6 +179,7 @@ export function classifyPlugin(manifest, options = {}) {
       skills,
       warnings,
       requiresReview: review,
+      validation,
     }
   }
 
@@ -181,6 +202,7 @@ export function classifyPlugin(manifest, options = {}) {
       skills,
       warnings,
       requiresReview: false,
+      validation,
     }
   }
 
@@ -196,6 +218,7 @@ export function classifyPlugin(manifest, options = {}) {
     skills: [],
     warnings,
     requiresReview: true,
+    validation,
   }
 }
 

@@ -49,4 +49,15 @@ test('profile registry resolves by id and surface', () => {
   assert.deepEqual(registry.bySurface('qq').map((p) => p.id), ['tavern'])
   assert.equal(registry.resolve('tavern').agentPreset, 'tavern')
   assert.equal(registry.resolve('missing'), undefined)
+
+  const calls = []
+  registry.registerProvider({
+    id: 'tavern',
+    bind: async (context) => calls.push(context),
+  })
+  return registry.bind('tavern', { sessionId: 's1' }).then((result) => {
+    assert.deepEqual(result, { ok: true })
+    assert.equal(calls[0].profileId, 'tavern')
+    assert.equal(calls[0].sessionId, 's1')
+  })
 })
