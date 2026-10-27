@@ -1,4 +1,4 @@
-# dsh-platform-core
+﻿# dsh-platform-core
 
 Surface-neutral runtime for DSH: the platform is the person, plugins are its abilities. QQ, Web, Telegram and other communication surfaces are optional adapters; the core never knows which one is in use.
 
@@ -129,4 +129,5 @@ node --test --test-force-exit
 
 ## License
 
-License not declared yet.
+MIT License.
+

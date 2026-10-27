@@ -16,7 +16,8 @@
   "files": [
     "src",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "repository": {
     "type": "git",
@@ -52,5 +53,6 @@
   },
   "engines": {
     "node": ">=22"
-  }
+  },
+  "license": "MIT"
 }
