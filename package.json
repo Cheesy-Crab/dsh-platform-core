@@ -1,0 +1,56 @@
+{
+  "name": "@dsh/platform-core",
+  "version": "0.41.0",
+  "description": "Surface-neutral DSH platform core: capability registry, plugin adapter, prompt policy and media delivery.",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./events": "./src/events.js",
+    "./delivery": "./src/delivery.js",
+    "./plugin-adapter": "./src/plugin-adapter.js",
+    "./registry": "./src/registry.js",
+    "./prompts": "./src/prompts/index.js"
+  },
+  "files": [
+    "src",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Cheesy-Crab/dsh-platform-core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Cheesy-Crab/dsh-platform-core/issues"
+  },
+  "homepage": "https://github.com/Cheesy-Crab/dsh-platform-core#readme",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "platform",
+    "capability",
+    "plugin"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "pluginApi": "1.1",
+    "capabilities": [
+      {
+        "id": "platform.core",
+        "kind": "knowledge",
+        "title": "Platform Core",
+        "description": "Surface-neutral platform runtime: capability registry, plugin discovery, prompt policy and media delivery."
+      }
+    ]
+  },
+  "scripts": {
+    "test": "node --test --test-force-exit"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
