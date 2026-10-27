@@ -46,6 +46,30 @@ function normalizeInventory(value) {
   return undefined
 }
 
+/**
+ * Build the inventory shape from Cordis's synchronous Loader entries. This is
+ * the same source DSH's pluginInventory service exposes asynchronously, but it
+ * is available while the platform bundle is still applying.
+ */
+export function inventoryFromLoader(loader) {
+  if (!loader || typeof loader.entries !== 'function') return undefined
+  try {
+    const entries = []
+    for (const entry of loader.entries()) {
+      if (entry?.options?.group) continue
+      const state = entry?.fiber?.state
+      entries.push({
+        moduleName: entry?.options?.name,
+        enabled: !entry?.disabled,
+        fiberPhase: state === 3 ? 'failed' : state === 4 ? 'disposed' : undefined,
+      })
+    }
+    return entries
+  } catch {
+    return undefined
+  }
+}
+
 function pluginRecord(dir, pkg) {
   const validation = validatePlatformManifest(pkg)
   const adapter = createPluginAdapter(pkg, { pluginId: pkg.name, validation })

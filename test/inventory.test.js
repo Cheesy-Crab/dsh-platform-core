@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { discoverPlugins } from '../src/registry.js'
+import { discoverPlugins, inventoryFromLoader } from '../src/registry.js'
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-inventory-'))
@@ -23,6 +23,22 @@ function fixture() {
   }))
   return root
 }
+
+test('loader entries become a synchronous inventory snapshot', () => {
+  const inventory = inventoryFromLoader({
+    entries: () => [
+      { options: { name: '@demo/tool' }, disabled: false, fiber: { state: 2 } },
+      { options: { name: '@demo/off' }, disabled: true, fiber: { state: 0 } },
+      { options: { name: '@demo/bad' }, disabled: false, fiber: { state: 3 } },
+      { options: { name: '@demo/group', group: true } },
+    ],
+  })
+  assert.deepEqual(inventory, [
+    { moduleName: '@demo/tool', enabled: true, fiberPhase: undefined },
+    { moduleName: '@demo/off', enabled: false, fiberPhase: undefined },
+    { moduleName: '@demo/bad', enabled: true, fiberPhase: 'failed' },
+  ])
+})
 
 test('inventory mode skips directory scanning and disabled entries', () => {
   const root = fixture()

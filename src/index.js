@@ -8,7 +8,7 @@ import { InvocationLedger } from './invocation-ledger.js'
 import { createPlatformStatus } from './status.js'
 import { isPrimaryAgent, platformPromptAllowed, profileCapabilitiesMode, profileForAgent } from './agent-policy.js'
 import { ProfileRegistry } from './profiles.js'
-import { discoverPlugins, PluginRegistry } from './registry.js'
+import { discoverPlugins, inventoryFromLoader, PluginRegistry } from './registry.js'
 import { buildCapabilityBrief, installCapabilityPrompt } from './prompts/capabilities.prompt.js'
 import { installCreativePrompt } from './prompts/creative.prompt.js'
 import { installToolFailurePrompt } from './prompts/tool-failures.prompt.js'
@@ -18,7 +18,7 @@ export { AdapterHost } from './adapter-host.js'
 export { ProfileRegistry } from './profiles.js'
 export { readPlatformManifest, validatePlatformManifest } from './manifest.js'
 export { createPluginAdapter, classifyPlugin, adaptToolResult } from './plugin-adapter.js'
-export { discoverPlugins, PluginRegistry } from './registry.js'
+export { discoverPlugins, inventoryFromLoader, PluginRegistry } from './registry.js'
 export { forwardMediaOutputs, generatedImageRecords, generatedImages } from './delivery.js'
 export { DeliveryCoordinator } from './delivery-coordinator.js'
 export { InvocationLedger } from './invocation-ledger.js'
@@ -82,9 +82,16 @@ export function apply(ctx, rawConfig = {}) {
   const profileDir = rawConfig.profileDir ?? defaultProfileDir()
   let pluginRegistry
   try {
-    pluginRegistry = new PluginRegistry(discoverPlugins({
+    const discovered = discoverPlugins({
       profileDir,
       ignore: ['@dsh/platform-core', '@dsh/session-core', 'dsh-qq-bridge'],
+    })
+    const inventory = inventoryFromLoader(ctx.get?.('loader') ?? ctx.loader)
+    const byName = new Map((inventory ?? []).map((entry) => [entry.moduleName, entry]))
+    pluginRegistry = new PluginRegistry(discovered.filter((plugin) => {
+      const entry = byName.get(plugin.name)
+      if (!entry) return true
+      return entry.enabled !== false && entry.fiberPhase !== 'failed' && entry.fiberPhase !== 'disposed'
     }))
     log('info', `discovered ${pluginRegistry.list().length} plugin(s) from ${profileDir}`)
   } catch (error) {
