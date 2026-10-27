@@ -6,7 +6,7 @@ import test from 'node:test'
 
 import { apply, name } from '../src/index.js'
 
-test('platform core is itself a loadable plugin with generic prompts', async () => {
+test('platform core is itself a loadable plugin with generic prompts', () => {
   const services = new Map()
   const cleanups = []
   const ctx = {
@@ -21,7 +21,7 @@ test('platform core is itself a loadable plugin with generic prompts', async () 
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-platform-plugin-'))
   try {
     assert.equal(name, 'dsh-platform-core')
-    await apply(ctx, { profileDir: profile })
+    apply(ctx, { profileDir: profile })
     assert.ok(services.get('agentExtensions'))
     assert.deepEqual(services.get('agentExtensions').list().map((item) => item.name), [
       'platform:tool-failures',
@@ -42,5 +42,6 @@ test('platform core is itself a loadable plugin with generic prompts', async () 
     fs.rmSync(profile, { recursive: true, force: true })
   }
 })
+
 
 

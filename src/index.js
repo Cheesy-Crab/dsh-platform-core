@@ -38,7 +38,7 @@ function defaultProfileDir() {
  * agent-extension registry, installs generic prompts, and exposes discovered
  * plugins. It never imports QQ, NapCat or OneBot.
  */
-export async function apply(ctx, rawConfig = {}) {
+export function apply(ctx, rawConfig = {}) {
   const log = (level, message) => {
     const line = `[platform-core] ${message}`
     try {
@@ -80,21 +80,10 @@ export async function apply(ctx, rawConfig = {}) {
   }
 
   const profileDir = rawConfig.profileDir ?? defaultProfileDir()
-  let pluginInventory
-  try {
-    const service = ctx.get?.('pluginInventory')
-    if (service && typeof service.list === 'function') {
-      pluginInventory = await service.list()
-      log('info', `plugin inventory: ${pluginInventory?.entries?.length ?? 0} entries`)
-    }
-  } catch (error) {
-    log('warn', `could not read plugin inventory: ${error?.message ?? error}`)
-  }
   let pluginRegistry
   try {
     pluginRegistry = new PluginRegistry(discoverPlugins({
       profileDir,
-      inventory: pluginInventory,
       ignore: ['@dsh/platform-core', '@dsh/session-core', 'dsh-qq-bridge'],
     }))
     log('info', `discovered ${pluginRegistry.list().length} plugin(s) from ${profileDir}`)

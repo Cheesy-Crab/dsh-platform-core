@@ -37,7 +37,7 @@ function fakeAgent(sections, meta = {}) {
   }
 }
 
-test('agent/created honors profile prompt and capability policy', async () => {
+test('agent/created honors profile prompt and capability policy', () => {
   const profile = tempProfile()
   const services = new Map()
   let created
@@ -56,7 +56,7 @@ test('agent/created honors profile prompt and capability policy', async () => {
     },
   }
   try {
-    await apply(ctx, { profileDir: profile })
+    apply(ctx, { profileDir: profile })
     assert.equal(typeof created, 'function')
 
     const tavern = []
@@ -77,4 +77,5 @@ test('agent/created honors profile prompt and capability policy', async () => {
     fs.rmSync(profile, { recursive: true, force: true })
   }
 })
+
 
