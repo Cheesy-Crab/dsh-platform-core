@@ -80,10 +80,10 @@ export async function forwardMediaOutputs({
   const resolvedTurnId = turnId ?? fromSeq ?? 'turn'
   const resolvedSurface = surface ?? chat?.type ?? 'default'
   for (const record of records) {
-    if (presented.has(record.file)) continue
+    const isPresented = presented.has(record.file)
     const options = optionsForChat?.(chat) ?? {}
     let billing
-    const deliver = async () => {
+    const chargeRecord = async () => {
       const cost = record.cost?.total
       if (typeof cost === 'number' && cost > 0 && charge) {
         try {
@@ -92,9 +92,28 @@ export async function forwardMediaOutputs({
           log?.('warn', `could not charge image quota: ${error?.message ?? error}`)
         }
       }
+    }
+    const reportBilling = async () => {
+      if (!billing || !sendText) return
+      const suffix = billing.overdraw ? '（额度已用尽）' : ''
+      const text = `本次生图消耗 ${buzz(billing.spent)} Buzz，剩余额度 ${buzz(billing.remaining)} Buzz${suffix}`
+      try {
+        await sendText(chat, text, options)
+      } catch (error) {
+        log?.('warn', `could not send image quota: ${error?.message ?? error}`)
+      }
+    }
+    const deliver = async () => {
+      await chargeRecord()
       const file = archive ? await archive(record.file, { session, state, log }) : record.file
       await sendImage?.(chat, file, options)
       return file
+    }
+
+    if (isPresented) {
+      await chargeRecord()
+      await reportBilling()
+      continue
     }
 
     let file
@@ -118,15 +137,7 @@ export async function forwardMediaOutputs({
       log?.('warn', `could not forward generated image ${record.file}: ${error?.message ?? error}`)
       continue
     }
-    if (billing && sendText) {
-      const suffix = billing.overdraw ? '（额度已用尽）' : ''
-      const text = `本次生图消耗 ${buzz(billing.spent)} Buzz，剩余额度 ${buzz(billing.remaining)} Buzz${suffix}`
-      try {
-        await sendText(chat, text, options)
-      } catch (error) {
-        log?.('warn', `could not send image quota: ${error?.message ?? error}`)
-      }
-    }
+    await reportBilling()
   }
   return sent
 }
