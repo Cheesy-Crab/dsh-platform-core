@@ -12,6 +12,14 @@ export class AdapterHost {
     this.instances = []
   }
 
+  resolveWorkspacesRoot(raw) {
+    const sessionService = this.ctx.get?.('sessionService')
+    if (typeof sessionService?.resolveWorkspacesRoot !== 'function') {
+      throw new Error('sessionService.resolveWorkspacesRoot is not available')
+    }
+    return sessionService.resolveWorkspacesRoot(raw)
+  }
+
   mount(adapter, options = {}) {
     if (!adapter || typeof adapter.id !== 'string' || typeof adapter.mount !== 'function') {
       throw new Error('adapter must expose { id, mount(host) }')
