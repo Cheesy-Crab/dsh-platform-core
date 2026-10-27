@@ -37,6 +37,13 @@ export class AdapterHost {
       extensions: this.registry,
       createSessionManager: (managerOptions) => sessionService.createManager(managerOptions),
       createUserStore: (storeOptions) => accessService.createStore(storeOptions),
+      resolveWorkspacesRoot: (raw) => sessionService.resolveWorkspacesRoot(raw),
+      access: {
+        normalizeCapabilities: (value) => accessService.normalizeCapabilities(value),
+        normalizeLevel: (value) => accessService.normalizeLevel(value),
+        atLeast: (level, minimum) => accessService.atLeast(level, minimum),
+        toolAllowed: (tool, capabilities) => accessService.toolAllowed(tool, capabilities),
+      },
       registerExtensions: (extensions) => extensions.map((extension) => this.registry.register(extension)),
       forwardMediaOutputs: (mediaOptions) => forwardMediaOutputs(mediaOptions),
     }
