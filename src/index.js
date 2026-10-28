@@ -19,6 +19,7 @@ import { installToolFailurePrompt } from './prompts/tool-failures.prompt.js'
 import { applyToolExposure, knownToolNames } from './tool-exposure.js'
 import { LEGACY_CAPABILITY_BINDINGS } from './capability-bindings.js'
 import { repairProfileCapabilities } from './capability-validation.js'
+import { expandCapabilityFamilies } from './capability-family.js'
 import { ProfileStateStore } from './profile-state.js'
 import { collectToolUsage, toolCapabilityMap } from './tool-usage.js'
 import { sessionEventsFrom } from './events.js'
@@ -136,6 +137,7 @@ export function apply(ctx, rawConfig = {}) {
       agentPreset: 'standard',
       surfaces: ['qq', 'web'],
       capabilities: ['image.generate'],
+      families: ['image'],
     })
   }
   const capabilityBriefs = new Map()
@@ -177,7 +179,9 @@ export function apply(ctx, rawConfig = {}) {
       const repaired = repairProfileCapabilities(profile, managedCapabilities, {
         onUnknown: (id) => log('warn', `unknown active capability: ${id}`),
       })
-      const effectiveProfile = repaired.profile
+      const effectiveProfile = profileSource === 'predicted'
+        ? expandCapabilityFamilies(repaired.profile, managedCapabilities)
+        : repaired.profile
       if (effectiveProfile) agent.__platformProfile = effectiveProfile
       agent.__platformProfileSource = profileSource
       recordEffectiveProfile(agent, effectiveProfile, profileSource)
