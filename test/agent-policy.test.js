@@ -63,3 +63,19 @@ test('prediction is rejected when it would change the agent preset', () => {
   )
   assert.deepEqual(result, { profile: undefined, source: 'default' })
 })
+
+test('resume reuses the effective profile instead of predicting again', () => {
+  const image = { id: 'image', agentPreset: 'standard' }
+  const profiles = {
+    list: () => [image],
+    get: (id) => [image].find((profile) => profile.id === id),
+  }
+  let predicted = 0
+  const result = effectiveProfileForAgent(
+    { session: { meta: { agentPreset: 'standard', effectiveProfileId: 'image', effectiveProfileSource: 'predicted' } } },
+    profiles,
+    { predictor: { predict: () => { predicted += 1; return image } } },
+  )
+  assert.deepEqual(result, { profile: image, source: 'predicted' })
+  assert.equal(predicted, 0)
+})
