@@ -21,6 +21,8 @@ import { LEGACY_CAPABILITY_BINDINGS } from './capability-bindings.js'
 import { repairProfileCapabilities } from './capability-validation.js'
 import { expandCapabilityFamilies } from './capability-family.js'
 import { ProfileStateStore } from './profile-state.js'
+import { UserCapabilityStore } from './user-capability-state.js'
+import { createProfilePredictor } from './profile-predictor.js'
 import { collectToolUsage, toolCapabilityMap } from './tool-usage.js'
 import { sessionEventsFrom } from './events.js'
 
@@ -123,6 +125,9 @@ export function apply(ctx, rawConfig = {}) {
     root: rawConfig.profileStateDir ?? path.join(process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh'), 'platform', 'profiles'),
     log,
   })
+  const userState = new UserCapabilityStore({
+    root: rawConfig.userStateDir ?? path.join(process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh'), 'platform', 'users'),
+  })
   const managedCapabilities = [
     ...pluginRegistry.capabilities(),
     ...(Array.isArray(rawConfig.capabilityBindings) ? rawConfig.capabilityBindings : []),
@@ -161,9 +166,16 @@ export function apply(ctx, rawConfig = {}) {
     }
     return capabilityBriefs.get(cacheKey)
   }
+  const profilePredictor = createProfilePredictor({
+    profiles: profileRegistry,
+    userState,
+    capabilities: managedCapabilities,
+  })
   try {
     ctx.provide('conversationProfiles', profileRegistry)
     ctx.provide('profileState', profileState)
+    ctx.provide('userCapabilityState', userState)
+    ctx.provide('profilePredictor', profilePredictor)
   } catch (error) {
     log('warn', `could not provide conversationProfiles/profileState: ${error?.message ?? error}`)
   }
@@ -224,6 +236,18 @@ export function apply(ctx, rawConfig = {}) {
           sessionId: session?.header?.id,
           chatKey: state?.key,
         })
+        const requester = state?.requester
+          ?? session?.meta?.requester
+          ?? state?.principal
+          ?? session?.meta?.principal
+        if (requester) {
+          userState.recordTurn({
+            userId: requester,
+            tools: usage,
+            profileId,
+            sessionId: session?.header?.id,
+          })
+        }
       },
     }))
   } catch (error) {
@@ -264,6 +288,7 @@ export function apply(ctx, rawConfig = {}) {
       generation,
       capabilityCount: managedCapabilities.length,
       profileState,
+      userState,
       hostDescriptor,
     }))
   } catch (error) {
