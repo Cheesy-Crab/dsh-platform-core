@@ -27,6 +27,7 @@ test('platform core is itself a loadable plugin with generic prompts', () => {
       'platform:tool-failures',
       'platform:creative',
       'platform:tool-exposure',
+      'platform:profile-state',
     ])
     assert.deepEqual(services.get('pluginRegistry').describe(), {
       plugins: 0,

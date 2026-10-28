@@ -18,6 +18,9 @@ import { installCreativePrompt } from './prompts/creative.prompt.js'
 import { installToolFailurePrompt } from './prompts/tool-failures.prompt.js'
 import { applyToolExposure } from './tool-exposure.js'
 import { LEGACY_CAPABILITY_BINDINGS } from './capability-bindings.js'
+import { ProfileStateStore } from './profile-state.js'
+import { collectToolUsage, toolCapabilityMap } from './tool-usage.js'
+import { sessionEventsFrom } from './events.js'
 
 export { AgentExtensionRegistry } from './agent-registry.js'
 export { AdapterHost } from './adapter-host.js'
@@ -114,6 +117,10 @@ export function apply(ctx, rawConfig = {}) {
   }
 
   const profileRegistry = new ProfileRegistry(pluginRegistry.profiles())
+  const profileState = new ProfileStateStore({
+    root: rawConfig.profileStateDir ?? path.join(process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh'), 'platform', 'profiles'),
+    log,
+  })
   const managedCapabilities = [
     ...LEGACY_CAPABILITY_BINDINGS,
     ...pluginRegistry.capabilities(),
@@ -144,8 +151,9 @@ export function apply(ctx, rawConfig = {}) {
   }
   try {
     ctx.provide('conversationProfiles', profileRegistry)
+    ctx.provide('profileState', profileState)
   } catch (error) {
-    log('warn', `could not provide conversationProfiles: ${error?.message ?? error}`)
+    log('warn', `could not provide conversationProfiles/profileState: ${error?.message ?? error}`)
   }
 
   try {
@@ -176,8 +184,25 @@ export function apply(ctx, rawConfig = {}) {
         profile,
       }),
     }))
+    disposers.push(registry.register({
+      name: 'platform:profile-state',
+      onTurnEnd: ({ session, state, fromSeq }) => {
+        const profileId = state?.profileId ?? state?.profileOverride?.id ?? 'default'
+        if (!profileId) return
+        const events = sessionEventsFrom(session, fromSeq)
+        const usage = collectToolUsage(events, {
+          toolCapability: toolCapabilityMap(managedCapabilities),
+        })
+        profileState.recordTurn({
+          profileId,
+          tools: usage,
+          sessionId: session?.header?.id,
+          chatKey: state?.key,
+        })
+      },
+    }))
   } catch (error) {
-    log('warn', `could not register tool exposure: ${error?.message ?? error}`)
+    log('warn', `could not register profile extensions: ${error?.message ?? error}`)
   }
 
   const generation = {
@@ -213,6 +238,7 @@ export function apply(ctx, rawConfig = {}) {
       effectLedger,
       generation,
       capabilityCount: managedCapabilities.length,
+      profileState,
       hostDescriptor,
     }))
   } catch (error) {
