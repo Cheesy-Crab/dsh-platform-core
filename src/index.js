@@ -18,6 +18,7 @@ import { installCreativePrompt } from './prompts/creative.prompt.js'
 import { installToolFailurePrompt } from './prompts/tool-failures.prompt.js'
 import { applyToolExposure, knownToolNames } from './tool-exposure.js'
 import { applyToolGuard } from './tool-guard.js'
+import { createToolInvocationHandler } from './tool-invocation.js'
 import { LEGACY_CAPABILITY_BINDINGS } from './capability-bindings.js'
 import { repairProfileCapabilities } from './capability-validation.js'
 import { expandCapabilityFamilies } from './capability-family.js'
@@ -291,6 +292,16 @@ export function apply(ctx, rawConfig = {}) {
   const effectLedger = new EffectLedger({ generationId: generation.id, log })
   const deliveryCoordinator = new DeliveryCoordinator({ log, generationId: generation.id, effectLedger })
   const invocationLedger = new InvocationLedger({ log, generationId: generation.id })
+  try {
+    const toolCapabilities = toolCapabilityMap(managedCapabilities)
+    disposers.push(ctx.on('tools/execute', createToolInvocationHandler({
+      invocationLedger,
+      toolCapabilities,
+      log,
+    })))
+  } catch (error) {
+    log('warn', `could not register tool invocation ledger: ${error?.message ?? error}`)
+  }
   try {
     ctx.provide('deliveryCoordinator', deliveryCoordinator)
     ctx.provide('invocationLedger', invocationLedger)
