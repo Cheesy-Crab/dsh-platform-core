@@ -153,8 +153,9 @@ function writeLog(log, level, message) {
  * create one per turn when only turn-scoped memory is wanted.
  */
 export class InvocationLedger {
-  constructor({ log } = {}) {
+  constructor({ log, generationId } = {}) {
     this.log = typeof log === 'function' ? log : undefined
+    this.generationId = generationId
     /** @type {Map<string, object>} key -> invocation entry */
     this.entries = new Map()
     /** @type {Map<string, object>} capability key -> mutex entry */
@@ -178,7 +179,8 @@ export class InvocationLedger {
     const session = requireId('sessionId', sessionId)
     const turn = requireId('turnId', turnId)
     const toolName = requireId('tool', tool)
-    const key = `${session}|${turn}|${toolName}|${sha256(normalizeArgs(args))}`
+    const prefix = this.generationId ? `${this.generationId}|` : ''
+    const key = `${prefix}${session}|${turn}|${toolName}|${sha256(normalizeArgs(args))}`
     const regenerate = regenerateRequested(args)
     const exclusiveMode = Boolean(exclusive)
 
@@ -197,7 +199,7 @@ export class InvocationLedger {
       const capability = capabilityId === undefined || capabilityId === null || capabilityId === ''
         ? toolName
         : String(capabilityId)
-      capabilityKey = `${session}|${turn}|capability:${capability}`
+      capabilityKey = `${prefix}${session}|${turn}|capability:${capability}`
       const held = this.capabilities.get(capabilityKey)
       if (held?.state === 'in_flight') {
         writeLog(this.log, 'debug', `exclusive capability busy: ${capabilityKey}`)

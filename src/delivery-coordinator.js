@@ -88,8 +88,10 @@ export class DeliveryCoordinator {
   /**
    * @param {{ log?: (level: string, message: string) => void }} [options]
    */
-  constructor({ log } = {}) {
+  constructor({ log, generationId, effectLedger } = {}) {
     this.log = log
+    this.generationId = generationId
+    this.effectLedger = effectLedger
     /**
      * Delivery records by key. A `pending` record owns the in-flight promise;
      * `failed` records are retryable tombstones kept so status can report them.
@@ -133,7 +135,7 @@ export class DeliveryCoordinator {
     if (!srf) throw new TypeError('surface is required')
     if (typeof send !== 'function') throw new TypeError('send must be a function')
     const outputId = outputIdOf(output)
-    const key = [sid, tid, srf, outputId].join('|')
+    const key = this.keyFor(sid, tid, srf, outputId)
 
     const existing = this.deliveries.get(key)
     if (existing?.state === 'delivered') {
@@ -147,18 +149,21 @@ export class DeliveryCoordinator {
     // failed record is deliberately overwritten here: failures are retryable.
     const record = { state: 'pending', outputId }
     this.deliveries.set(key, record)
+    this.recordEffect('create', 'pending', key, outputId)
 
     const promise = Promise.resolve().then(async () => {
       try {
         const result = await send(output, target)
         record.state = 'delivered'
         record.promise = undefined
+        this.recordEffect('release', 'delivered', key, outputId)
         logSafely(this.log, 'info', `delivered ${key}`)
         return { delivered: true, key, outputId, result }
       } catch (error) {
         record.state = 'failed'
         record.error = error
         record.promise = undefined
+        this.recordEffect('release', 'failed', key, outputId, error)
         logSafely(this.log, 'warn', `delivery failed for ${key}: ${error?.message ?? error}`)
         throw error
       }
@@ -189,12 +194,42 @@ export class DeliveryCoordinator {
    *   included); `unknown` means no attempt is recorded, or an identifier is
    *   missing (then `key` is null).
    */
+  keyFor(sessionId, turnId, surface, outputId) {
+    return [
+      ...(this.generationId ? [this.generationId] : []),
+      sessionId,
+      turnId,
+      surface,
+      outputId,
+    ].join('|')
+  }
+
+  recordEffect(operation, state, effectId, resourceId, error) {
+    try {
+      this.effectLedger?.record({
+        owner: { pluginId: 'platform-core', activationId: this.generationId },
+        effectId,
+        effectKind: 'media.delivery',
+        operation,
+        state,
+        resourceId,
+        ...(error ? { errorCode: 'delivery-failed' } : {}),
+      })
+    } catch (failure) {
+      logSafely(this.log, 'warn', `effect ledger write failed: ${failure?.message ?? failure}`)
+    }
+  }
+
   stats() {
     const counts = { pending: 0, delivered: 0, failed: 0 }
     for (const record of this.deliveries.values()) {
       if (counts[record.state] !== undefined) counts[record.state] += 1
     }
-    return { total: this.deliveries.size, ...counts }
+    return {
+      ...(this.generationId ? { generationId: this.generationId } : {}),
+      total: this.deliveries.size,
+      ...counts,
+    }
   }
 
   status({ sessionId, turnId, surface, outputId } = {}) {
@@ -205,7 +240,7 @@ export class DeliveryCoordinator {
     if (!sid || !tid || !srf || !oid) {
       return { state: 'unknown', key: null, outputId: oid ?? null }
     }
-    const key = [sid, tid, srf, oid].join('|')
+    const key = this.keyFor(sid, tid, srf, oid)
     const record = this.deliveries.get(key)
     if (!record) return { state: 'unknown', key, outputId: oid }
     if (record.state === 'delivered') return { state: 'delivered', key, outputId: oid }

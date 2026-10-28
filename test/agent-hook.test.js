@@ -1,4 +1,4 @@
-﻿import assert from 'node:assert/strict'
+import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -19,7 +19,10 @@ function tempProfile() {
       platform: {
         contract: '1.2',
         capabilities: [{ id: 'demo.cap', kind: 'action', title: 'Demo', bind: { tool: 'demo_tool' } }],
-        profiles: [{ id: 'tavern', agentPreset: 'tavern', promptPolicy: { platformPrompts: false, capabilities: 'none' } }],
+        profiles: [
+          { id: 'tavern', agentPreset: 'tavern', promptPolicy: { platformPrompts: false, capabilities: 'none' } },
+          { id: 'bare', agentPreset: 'bare', capabilities: [] },
+        ],
       },
     },
   }))
@@ -56,7 +59,10 @@ test('agent/created honors profile prompt and capability policy', () => {
     },
   }
   try {
-    apply(ctx, { profileDir: profile })
+    apply(ctx, {
+      profileDir: profile,
+      capabilityBindings: [{ id: 'demo.cap', kind: 'action', bind: { tool: 'demo_tool' } }],
+    })
     assert.equal(typeof created, 'function')
 
     const tavern = []
@@ -72,6 +78,20 @@ test('agent/created honors profile prompt and capability policy', () => {
     const child = []
     created({ agent: { parent: {}, ctx: { systemPrompt: { section: (v) => child.push(v.name) } }, session: { meta: {} } }, source: 'subagent' })
     assert.deepEqual(child, [])
+
+    const restricted = []
+    const bare = {
+      session: { meta: { agentPreset: 'bare' } },
+      ctx: {
+        systemPrompt: { section: () => {} },
+        tools: {
+          schemas: () => [{ name: 'read' }, { name: 'demo_tool' }],
+          restrict: (filter) => restricted.push(filter),
+        },
+      },
+    }
+    created({ agent: bare, source: 'startup' })
+    assert.deepEqual(restricted[0].deny, ['demo_tool'])
   } finally {
     for (const cleanup of cleanups) cleanup()
     fs.rmSync(profile, { recursive: true, force: true })

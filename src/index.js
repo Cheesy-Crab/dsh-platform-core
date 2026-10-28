@@ -1,9 +1,11 @@
 import os from 'node:os'
 import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 
 import { AgentExtensionRegistry } from './agent-registry.js'
 import { AdapterHost } from './adapter-host.js'
 import { DeliveryCoordinator } from './delivery-coordinator.js'
+import { EffectLedger } from './effect-ledger.js'
 import { InvocationLedger } from './invocation-ledger.js'
 import { createPlatformStatus } from './status.js'
 import { createHostDescriptor, fabricCompatibility } from './fabric.js'
@@ -13,6 +15,7 @@ import { discoverPlugins, inventoryFromLoader, PluginRegistry } from './registry
 import { buildCapabilityBrief, installCapabilityPrompt } from './prompts/capabilities.prompt.js'
 import { installCreativePrompt } from './prompts/creative.prompt.js'
 import { installToolFailurePrompt } from './prompts/tool-failures.prompt.js'
+import { applyToolExposure } from './tool-exposure.js'
 
 export { AgentExtensionRegistry } from './agent-registry.js'
 export { AdapterHost } from './adapter-host.js'
@@ -22,9 +25,11 @@ export { createPluginAdapter, classifyPlugin, adaptToolResult } from './plugin-a
 export { discoverPlugins, inventoryFromLoader, PluginRegistry } from './registry.js'
 export { forwardMediaOutputs, generatedImageRecords, generatedImages } from './delivery.js'
 export { DeliveryCoordinator } from './delivery-coordinator.js'
+export { EffectLedger } from './effect-ledger.js'
 export { InvocationLedger } from './invocation-ledger.js'
 export { createPlatformStatus } from './status.js'
 export { createHostDescriptor, fabricCompatibility, negotiateCapabilities, satisfiesVersion, toFabricManifest } from './fabric.js'
+export { applyToolExposure, capabilityToolMap } from './tool-exposure.js'
 export { installCreativePrompt } from './prompts/creative.prompt.js'
 export { installToolFailurePrompt } from './prompts/tool-failures.prompt.js'
 
@@ -107,9 +112,13 @@ export function apply(ctx, rawConfig = {}) {
   }
 
   const profileRegistry = new ProfileRegistry(pluginRegistry.profiles())
+  const managedCapabilities = [
+    ...pluginRegistry.capabilities(),
+    ...(Array.isArray(rawConfig.capabilityBindings) ? rawConfig.capabilityBindings : []),
+  ]
   const capabilityBriefs = {
-    index: buildCapabilityBrief(pluginRegistry.capabilities(), { max: 20 }),
-    full: buildCapabilityBrief(pluginRegistry.capabilities(), { max: 50 }),
+    index: buildCapabilityBrief(managedCapabilities, { max: 20 }),
+    full: buildCapabilityBrief(managedCapabilities, { max: 50 }),
   }
   try {
     ctx.provide('conversationProfiles', profileRegistry)
@@ -131,19 +140,30 @@ export function apply(ctx, rawConfig = {}) {
       if (capabilitiesMode !== 'none') {
         installCapabilityPrompt(agent, state, capabilityBriefs[capabilitiesMode], log)
       }
+      applyToolExposure(agent, {
+        capabilities: managedCapabilities,
+        profile,
+      })
     })
     if (typeof offCreated === 'function') disposers.push(offCreated)
   } catch (error) {
     log('warn', `could not subscribe to agent/created: ${error?.message ?? error}`)
   }
 
-  const deliveryCoordinator = new DeliveryCoordinator({ log })
-  const invocationLedger = new InvocationLedger({ log })
+  const generation = {
+    id: `gen-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`,
+    startedAt: new Date().toISOString(),
+  }
+  const effectLedger = new EffectLedger({ generationId: generation.id, log })
+  const deliveryCoordinator = new DeliveryCoordinator({ log, generationId: generation.id, effectLedger })
+  const invocationLedger = new InvocationLedger({ log, generationId: generation.id })
   try {
     ctx.provide('deliveryCoordinator', deliveryCoordinator)
     ctx.provide('invocationLedger', invocationLedger)
+    ctx.provide('platformGeneration', generation)
+    ctx.provide('effectLedger', effectLedger)
   } catch (error) {
-    log('warn', `could not provide delivery services: ${error?.message ?? error}`)
+    log('warn', `could not provide delivery/generation services: ${error?.message ?? error}`)
   }
 
   const adapterHost = new AdapterHost({ ctx, registry, profiles: profileRegistry, deliveryCoordinator, invocationLedger, log })
@@ -160,6 +180,8 @@ export function apply(ctx, rawConfig = {}) {
       profileRegistry,
       deliveryCoordinator,
       invocationLedger,
+      effectLedger,
+      generation,
       hostDescriptor,
     }))
   } catch (error) {
