@@ -10,7 +10,7 @@ import { EffectLedger } from './effect-ledger.js'
 import { InvocationLedger } from './invocation-ledger.js'
 import { createPlatformStatus } from './status.js'
 import { createHostDescriptor, fabricCompatibility } from './fabric.js'
-import { effectiveProfileForAgent, isPrimaryAgent, platformPromptAllowed, profileCapabilitiesMode, profileForAgent } from './agent-policy.js'
+import { effectiveProfileForAgent, isPrimaryAgent, platformPromptAllowed, profileCapabilitiesMode, recordEffectiveProfile } from './agent-policy.js'
 import { ProfileRegistry } from './profiles.js'
 import { discoverPlugins, inventoryFromLoader, PluginRegistry } from './registry.js'
 import { buildCapabilityBrief, installCapabilityPrompt } from './prompts/capabilities.prompt.js'
@@ -163,6 +163,7 @@ export function apply(ctx, rawConfig = {}) {
       const { profile, source: profileSource } = effectiveProfileForAgent(agent, profileRegistry, { predictor })
       if (profile) agent.__platformProfile = profile
       agent.__platformProfileSource = profileSource
+      recordEffectiveProfile(agent, profile, profileSource)
       const state = agent.__platformState ?? (agent.__platformState = {})
       if (platformPromptAllowed(profile)) {
         installToolFailurePrompt(agent, state, log)

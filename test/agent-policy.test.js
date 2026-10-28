@@ -48,3 +48,18 @@ test('selected profile wins over prediction and prediction fills the gap', () =>
   const predicted = effectiveProfileForAgent({ session: { meta: {} } }, profiles, { predictor })
   assert.deepEqual(predicted, { profile: image, source: 'predicted' })
 })
+
+test('prediction is rejected when it would change the agent preset', () => {
+  const image = { id: 'image', agentPreset: 'standard' }
+  const tavern = { id: 'tavern', agentPreset: 'tavern' }
+  const profiles = {
+    list: () => [image, tavern],
+    get: (id) => [image, tavern].find((profile) => profile.id === id),
+  }
+  const result = effectiveProfileForAgent(
+    { session: { meta: { agentPreset: 'standard' } } },
+    profiles,
+    { predictor: { predict: () => tavern } },
+  )
+  assert.deepEqual(result, { profile: undefined, source: 'default' })
+})

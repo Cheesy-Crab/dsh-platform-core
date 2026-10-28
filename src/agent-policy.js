@@ -26,6 +26,16 @@ export function profileForAgent(agent, profiles) {
   }
   const meta = agent.session?.meta ?? agent.meta ?? {}
   const profileId = firstString(meta.profileId, agent.profileId)
+  if (profileId && profiles?.get) return profiles.get(profileId)
+  const effectiveProfileId = firstString(meta.effectiveProfileId)
+  if (effectiveProfileId && profiles?.get) return profiles.get(effectiveProfileId)
+  return undefined
+}
+
+function selectedProfileForAgent(agent, profiles) {
+  if (!agent) return undefined
+  const meta = agent.session?.meta ?? agent.meta ?? {}
+  const profileId = firstString(meta.profileId, agent.profileId)
   if (!profileId || !profiles?.get) return undefined
   return profiles.get(profileId)
 }
@@ -34,20 +44,49 @@ export function profileForAgent(agent, profiles) {
  * Decide the effective profile exactly once at agent/created.
  *
  * - explicit selection wins;
+ * - an effective profile persisted on the session is reused on resume;
  * - otherwise ask the registered predictor (user stats) for a default;
  * - otherwise no profile.
  *
  * The result is the single source for prompt and tool exposure.
  */
 export function effectiveProfileForAgent(agent, profiles, { predictor } = {}) {
-  const selected = profileForAgent(agent, profiles)
+  const selected = selectedProfileForAgent(agent, profiles)
   if (selected) return { profile: selected, source: 'selected' }
+
+  const meta = agent?.session?.meta ?? agent?.meta ?? {}
+  const savedId = firstString(meta.effectiveProfileId)
+  if (savedId) {
+    const saved = profiles?.get?.(savedId)
+    if (saved) {
+      return {
+        profile: saved,
+        source: firstString(meta.effectiveProfileSource) ?? 'predicted',
+      }
+    }
+  }
+
   const predicted = predictor?.predict?.({ agent, profiles: profiles?.list?.() ?? [] })
   if (predicted) {
-    const profile = typeof predicted === 'string' ? profiles?.get?.(predicted) : predicted
-    if (profile) return { profile, source: 'predicted' }
+    const candidate = typeof predicted === 'string' ? profiles?.get?.(predicted) : predicted
+    const known = candidate?.id ? profiles?.get?.(candidate.id) : undefined
+    const preset = firstString(meta.agentPreset, agent?.agentPreset)
+    if (known && (!preset || !known.agentPreset || known.agentPreset === preset)) {
+      return { profile: known, source: 'predicted' }
+    }
   }
   return { profile: undefined, source: 'default' }
+}
+
+/**
+ * Record the chosen assembly on the session so a resume does not re-predict.
+ * This is session metadata, not the user's selected profile id.
+ */
+export function recordEffectiveProfile(agent, profile, source) {
+  const meta = agent?.session?.meta
+  if (!meta) return
+  if (profile?.id) meta.effectiveProfileId = profile.id
+  meta.effectiveProfileSource = source
 }
 
 export function platformPromptAllowed(profile) {
