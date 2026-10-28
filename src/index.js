@@ -1,5 +1,6 @@
 import os from 'node:os'
 import path from 'node:path'
+import fs from 'node:fs'
 import { randomUUID } from 'node:crypto'
 
 import { AgentExtensionRegistry } from './agent-registry.js'
@@ -118,9 +119,28 @@ export function apply(ctx, rawConfig = {}) {
     ...pluginRegistry.capabilities(),
     ...(Array.isArray(rawConfig.capabilityBindings) ? rawConfig.capabilityBindings : []),
   ]
-  const capabilityBriefs = {
-    index: buildCapabilityBrief(managedCapabilities, { max: 20 }),
-    full: buildCapabilityBrief(managedCapabilities, { max: 50 }),
+  if (rawConfig.builtinProfiles !== false
+    && fs.existsSync(path.join(profileDir, 'node_modules', 'dsh-image-gen', 'package.json'))) {
+    profileRegistry.add({
+      id: 'image',
+      kind: 'action',
+      title: 'Image',
+      agentPreset: 'standard',
+      surfaces: ['qq', 'web'],
+      capabilities: ['image.generate'],
+    })
+  }
+  const capabilityBriefs = new Map()
+  const briefFor = (profile, mode) => {
+    const active = Array.isArray(profile?.capabilities) ? new Set(profile.capabilities) : undefined
+    const key = `${mode}|${active ? [...active].sort().join(',') : '*'}`
+    if (!capabilityBriefs.has(key)) {
+      const available = active
+        ? managedCapabilities.filter((capability) => active.has(capability.id))
+        : managedCapabilities
+      capabilityBriefs.set(key, buildCapabilityBrief(available, { max: mode === 'full' ? 50 : 20 }))
+    }
+    return capabilityBriefs.get(key)
   }
   try {
     ctx.provide('conversationProfiles', profileRegistry)
@@ -140,7 +160,7 @@ export function apply(ctx, rawConfig = {}) {
       }
       const capabilitiesMode = profileCapabilitiesMode(profile)
       if (capabilitiesMode !== 'none') {
-        installCapabilityPrompt(agent, state, capabilityBriefs[capabilitiesMode], log)
+        installCapabilityPrompt(agent, state, briefFor(profile, capabilitiesMode), log)
       }
     })
     if (typeof offCreated === 'function') disposers.push(offCreated)
@@ -192,6 +212,7 @@ export function apply(ctx, rawConfig = {}) {
       invocationLedger,
       effectLedger,
       generation,
+      capabilityCount: managedCapabilities.length,
       hostDescriptor,
     }))
   } catch (error) {
