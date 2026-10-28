@@ -16,8 +16,9 @@ import { discoverPlugins, inventoryFromLoader, PluginRegistry } from './registry
 import { buildCapabilityBrief, installCapabilityPrompt } from './prompts/capabilities.prompt.js'
 import { installCreativePrompt } from './prompts/creative.prompt.js'
 import { installToolFailurePrompt } from './prompts/tool-failures.prompt.js'
-import { applyToolExposure } from './tool-exposure.js'
+import { applyToolExposure, knownToolNames } from './tool-exposure.js'
 import { LEGACY_CAPABILITY_BINDINGS } from './capability-bindings.js'
+import { repairProfileCapabilities } from './capability-validation.js'
 import { ProfileStateStore } from './profile-state.js'
 import { collectToolUsage, toolCapabilityMap } from './tool-usage.js'
 import { sessionEventsFrom } from './events.js'
@@ -122,9 +123,9 @@ export function apply(ctx, rawConfig = {}) {
     log,
   })
   const managedCapabilities = [
-    ...LEGACY_CAPABILITY_BINDINGS,
     ...pluginRegistry.capabilities(),
     ...(Array.isArray(rawConfig.capabilityBindings) ? rawConfig.capabilityBindings : []),
+    ...LEGACY_CAPABILITY_BINDINGS,
   ]
   if (rawConfig.builtinProfiles !== false
     && fs.existsSync(path.join(profileDir, 'node_modules', 'dsh-image-gen', 'package.json'))) {
@@ -138,16 +139,25 @@ export function apply(ctx, rawConfig = {}) {
     })
   }
   const capabilityBriefs = new Map()
-  const briefFor = (profile, mode) => {
+  const briefFor = (agent, profile, mode) => {
     const active = Array.isArray(profile?.capabilities) ? new Set(profile.capabilities) : undefined
+    const known = knownToolNames(agent)
+    const knownKey = known ? [...known].sort().join(',') : '*'
     const key = `${mode}|${active ? [...active].sort().join(',') : '*'}`
-    if (!capabilityBriefs.has(key)) {
-      const available = active
+    const cacheKey = `${key}|${knownKey}`
+    if (!capabilityBriefs.has(cacheKey)) {
+      let available = active
         ? managedCapabilities.filter((capability) => active.has(capability.id))
         : managedCapabilities
-      capabilityBriefs.set(key, buildCapabilityBrief(available, { max: mode === 'full' ? 50 : 20 }))
+      if (known) {
+        available = available.filter((capability) => {
+          const tool = capability?.bind?.tool
+          return !tool || known.has(tool)
+        })
+      }
+      capabilityBriefs.set(cacheKey, buildCapabilityBrief(available, { max: mode === 'full' ? 50 : 20 }))
     }
-    return capabilityBriefs.get(key)
+    return capabilityBriefs.get(cacheKey)
   }
   try {
     ctx.provide('conversationProfiles', profileRegistry)
@@ -160,18 +170,25 @@ export function apply(ctx, rawConfig = {}) {
     const offCreated = ctx.on?.('agent/created', ({ agent, source }) => {
       if (!isPrimaryAgent(agent, source)) return
       const predictor = ctx.get?.('profilePredictor')
-      const { profile, source: profileSource } = effectiveProfileForAgent(agent, profileRegistry, { predictor })
-      if (profile) agent.__platformProfile = profile
+      const { profile, source: profileSource, predictionError } = effectiveProfileForAgent(agent, profileRegistry, { predictor })
+      if (predictionError) {
+        log('warn', `profile prediction failed: ${predictionError?.message ?? predictionError}`)
+      }
+      const repaired = repairProfileCapabilities(profile, managedCapabilities, {
+        onUnknown: (id) => log('warn', `unknown active capability: ${id}`),
+      })
+      const effectiveProfile = repaired.profile
+      if (effectiveProfile) agent.__platformProfile = effectiveProfile
       agent.__platformProfileSource = profileSource
-      recordEffectiveProfile(agent, profile, profileSource)
+      recordEffectiveProfile(agent, effectiveProfile, profileSource)
       const state = agent.__platformState ?? (agent.__platformState = {})
-      if (platformPromptAllowed(profile)) {
+      if (platformPromptAllowed(effectiveProfile)) {
         installToolFailurePrompt(agent, state, log)
         installCreativePrompt(agent, state, log)
       }
-      const capabilitiesMode = profileCapabilitiesMode(profile)
+      const capabilitiesMode = profileCapabilitiesMode(effectiveProfile)
       if (capabilitiesMode !== 'none') {
-        installCapabilityPrompt(agent, state, briefFor(profile, capabilitiesMode), log)
+        installCapabilityPrompt(agent, state, briefFor(agent, effectiveProfile, capabilitiesMode), log)
       }
     })
     if (typeof offCreated === 'function') disposers.push(offCreated)
@@ -184,13 +201,14 @@ export function apply(ctx, rawConfig = {}) {
       name: 'platform:tool-exposure',
       onSession: ({ agent, profile }) => applyToolExposure(agent, {
         capabilities: managedCapabilities,
-        profile: profile?.id ? profile : agent.__platformProfile,
+        profile: agent.__platformProfile ?? (profile?.id ? profile : undefined),
+        onError: (error, detail) => log('warn', `tool exposure failed: ${error?.message ?? error}; deny=${detail?.deny?.join(',') ?? ''}`),
       }),
     }))
     disposers.push(registry.register({
       name: 'platform:profile-state',
       onTurnEnd: ({ session, state, fromSeq }) => {
-        const profileId = state?.profileId ?? state?.profileOverride?.id ?? 'default'
+        const profileId = session?.meta?.effectiveProfileId ?? state?.profileId ?? 'default'
         if (!profileId) return
         const events = sessionEventsFrom(session, fromSeq)
         const usage = collectToolUsage(events, {

@@ -79,3 +79,15 @@ test('resume reuses the effective profile instead of predicting again', () => {
   assert.deepEqual(result, { profile: image, source: 'predicted' })
   assert.equal(predicted, 0)
 })
+
+test('a throwing predictor falls back instead of breaking agent creation', () => {
+  const profiles = { list: () => [], get: () => undefined }
+  const result = effectiveProfileForAgent(
+    { session: { meta: { agentPreset: 'standard' } } },
+    profiles,
+    { predictor: { predict: () => { throw new Error('stats unavailable') } } },
+  )
+  assert.equal(result.profile, undefined)
+  assert.equal(result.source, 'default')
+  assert.equal(result.predictionError.message, 'stats unavailable')
+})

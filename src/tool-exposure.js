@@ -21,7 +21,7 @@ export function capabilityToolMap(capabilities = []) {
   return map
 }
 
-function visibleToolNames(agent) {
+export function visibleToolNames(agent) {
   try {
     const schemas = agent?.ctx?.tools?.schemas?.(agent.ctx)
     if (!Array.isArray(schemas)) return undefined
@@ -30,6 +30,8 @@ function visibleToolNames(agent) {
     return undefined
   }
 }
+
+export const knownToolNames = visibleToolNames
 
 /**
  * Apply a deny mask for managed tools whose capability is not active.
@@ -40,22 +42,27 @@ function visibleToolNames(agent) {
  *
  * @returns {(() => void) | undefined} the restriction disposer, if one was made
  */
-export function applyToolExposure(agent, { capabilities = [], profile } = {}) {
+export function applyToolExposure(agent, { capabilities = [], profile, onError } = {}) {
   const active = Array.isArray(profile?.capabilities) ? new Set(profile.capabilities) : undefined
   if (!active) return undefined
   const managed = capabilityToolMap(capabilities)
   if (managed.size === 0) return undefined
   const known = visibleToolNames(agent)
+  if (!known) {
+    onError?.(new Error('tool schemas are unavailable; refusing to guess deny list'), { profile })
+    return undefined
+  }
   const deny = []
   for (const [capabilityId, tool] of managed) {
     if (active.has(capabilityId)) continue
-    if (known && !known.has(tool)) continue
+    if (!known.has(tool)) continue
     deny.push(tool)
   }
   if (deny.length === 0) return undefined
   try {
     return agent.ctx.tools.restrict({ deny })
-  } catch {
+  } catch (error) {
+    onError?.(error, { profile, deny, known: [...known] })
     return undefined
   }
 }

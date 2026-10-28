@@ -66,7 +66,12 @@ export function effectiveProfileForAgent(agent, profiles, { predictor } = {}) {
     }
   }
 
-  const predicted = predictor?.predict?.({ agent, profiles: profiles?.list?.() ?? [] })
+  let predicted
+  try {
+    predicted = predictor?.predict?.({ agent, profiles: profiles?.list?.() ?? [] })
+  } catch (error) {
+    return { profile: undefined, source: 'default', predictionError: error }
+  }
   if (predicted) {
     const candidate = typeof predicted === 'string' ? profiles?.get?.(predicted) : predicted
     const known = candidate?.id ? profiles?.get?.(candidate.id) : undefined
