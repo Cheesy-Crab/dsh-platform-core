@@ -21,6 +21,9 @@ export function readPlatformManifest(pkg = {}) {
   const tools = Array.isArray(platform.tools)
     ? platform.tools
     : Array.isArray(dsh.tools) ? dsh.tools : []
+  const requires = platform.requires && typeof platform.requires === 'object'
+    ? platform.requires
+    : { required: {}, optional: {} }
 
   const roles = new Set(Array.isArray(platform.roles) ? platform.roles : [])
   if (capabilities.length > 0) roles.add('capability')
@@ -36,6 +39,7 @@ export function readPlatformManifest(pkg = {}) {
     prompts,
     skills,
     tools,
+    requires,
     roles: [...roles],
     client: dsh.client,
     bundle: dsh.bundle,

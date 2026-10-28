@@ -1,4 +1,4 @@
-﻿import assert from 'node:assert/strict'
+import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -37,6 +37,9 @@ test('platform core is itself a loadable plugin with generic prompts', () => {
       profiles: 0,
       clients: 0,
     })
+    assert.equal(services.get('platformHostDescriptor').id, 'dsh.platform-core')
+    assert.equal(typeof services.get('fabricCompatibility'), 'function')
+    assert.equal(services.get('fabricCompatibility')({ name: 'x', version: '1.0.0', dsh: { platform: {} } }).status, 'needs-adapter')
   } finally {
     for (const cleanup of cleanups) cleanup()
     fs.rmSync(profile, { recursive: true, force: true })

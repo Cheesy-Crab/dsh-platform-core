@@ -6,6 +6,7 @@ import { AdapterHost } from './adapter-host.js'
 import { DeliveryCoordinator } from './delivery-coordinator.js'
 import { InvocationLedger } from './invocation-ledger.js'
 import { createPlatformStatus } from './status.js'
+import { createHostDescriptor, fabricCompatibility } from './fabric.js'
 import { isPrimaryAgent, platformPromptAllowed, profileCapabilitiesMode, profileForAgent } from './agent-policy.js'
 import { ProfileRegistry } from './profiles.js'
 import { discoverPlugins, inventoryFromLoader, PluginRegistry } from './registry.js'
@@ -23,6 +24,7 @@ export { forwardMediaOutputs, generatedImageRecords, generatedImages } from './d
 export { DeliveryCoordinator } from './delivery-coordinator.js'
 export { InvocationLedger } from './invocation-ledger.js'
 export { createPlatformStatus } from './status.js'
+export { createHostDescriptor, fabricCompatibility, negotiateCapabilities, satisfiesVersion, toFabricManifest } from './fabric.js'
 export { installCreativePrompt } from './prompts/creative.prompt.js'
 export { installToolFailurePrompt } from './prompts/tool-failures.prompt.js'
 
@@ -145,13 +147,20 @@ export function apply(ctx, rawConfig = {}) {
   }
 
   const adapterHost = new AdapterHost({ ctx, registry, profiles: profileRegistry, deliveryCoordinator, invocationLedger, log })
+  const hostDescriptor = createHostDescriptor({
+    contract: '1.2',
+    surfaces: ['qq', 'web'],
+  })
   try {
     ctx.provide('adapterHost', adapterHost)
+    ctx.provide('platformHostDescriptor', hostDescriptor)
+    ctx.provide('fabricCompatibility', (pkg) => fabricCompatibility(pkg, { host: hostDescriptor }))
     ctx.provide('platformStatus', createPlatformStatus({
       pluginRegistry,
       profileRegistry,
       deliveryCoordinator,
       invocationLedger,
+      hostDescriptor,
     }))
   } catch (error) {
     log('warn', `could not provide adapterHost/status: ${error?.message ?? error}`)
