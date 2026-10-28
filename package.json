@@ -1,6 +1,6 @@
 {
   "name": "@dsh/platform-core",
-  "version": "0.49.0",
+  "version": "0.50.0",
   "description": "Surface-neutral DSH platform core: capability registry, plugin adapter, prompt policy and media delivery.",
   "type": "module",
   "main": "./src/index.js",

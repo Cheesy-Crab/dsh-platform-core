@@ -16,9 +16,8 @@ export function isPrimaryAgent(agent, source) {
 }
 
 /**
- * Resolve the conversation profile attached to an agent. session-core sets
- * `agent.__platformProfile`; the preset is a fallback for agents created by
- * other hosts.
+ * Resolve an explicitly selected profile for an agent. session-core puts the
+ * selected profile id in session meta; platform must not guess by preset.
  */
 export function profileForAgent(agent, profiles) {
   if (!agent) return undefined
@@ -26,9 +25,29 @@ export function profileForAgent(agent, profiles) {
     return agent.__platformProfile
   }
   const meta = agent.session?.meta ?? agent.meta ?? {}
-  const preset = firstString(meta.agentPreset, agent.agentPreset)
-  if (!preset || !profiles?.list) return undefined
-  return profiles.list().find((profile) => profile.agentPreset === preset)
+  const profileId = firstString(meta.profileId, agent.profileId)
+  if (!profileId || !profiles?.get) return undefined
+  return profiles.get(profileId)
+}
+
+/**
+ * Decide the effective profile exactly once at agent/created.
+ *
+ * - explicit selection wins;
+ * - otherwise ask the registered predictor (user stats) for a default;
+ * - otherwise no profile.
+ *
+ * The result is the single source for prompt and tool exposure.
+ */
+export function effectiveProfileForAgent(agent, profiles, { predictor } = {}) {
+  const selected = profileForAgent(agent, profiles)
+  if (selected) return { profile: selected, source: 'selected' }
+  const predicted = predictor?.predict?.({ agent, profiles: profiles?.list?.() ?? [] })
+  if (predicted) {
+    const profile = typeof predicted === 'string' ? profiles?.get?.(predicted) : predicted
+    if (profile) return { profile, source: 'predicted' }
+  }
+  return { profile: undefined, source: 'default' }
 }
 
 export function platformPromptAllowed(profile) {

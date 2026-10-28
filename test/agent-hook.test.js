@@ -66,7 +66,7 @@ test('agent/created honors profile prompt and capability policy', async () => {
     assert.equal(typeof created, 'function')
 
     const tavern = []
-    created({ agent: fakeAgent(tavern, { agentPreset: 'tavern' }), source: 'startup' })
+    created({ agent: fakeAgent(tavern, { agentPreset: 'tavern', profileId: 'tavern' }), source: 'startup' })
     assert.deepEqual(tavern, [])
 
     const normal = []
