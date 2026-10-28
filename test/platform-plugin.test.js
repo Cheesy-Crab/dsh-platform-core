@@ -26,6 +26,7 @@ test('platform core is itself a loadable plugin with generic prompts', () => {
     assert.deepEqual(services.get('agentExtensions').list().map((item) => item.name), [
       'platform:tool-failures',
       'platform:creative',
+      'platform:tool-exposure',
     ])
     assert.deepEqual(services.get('pluginRegistry').describe(), {
       plugins: 0,
@@ -45,6 +46,7 @@ test('platform core is itself a loadable plugin with generic prompts', () => {
     fs.rmSync(profile, { recursive: true, force: true })
   }
 })
+
 
 
 

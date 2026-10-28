@@ -40,7 +40,7 @@ function fakeAgent(sections, meta = {}) {
   }
 }
 
-test('agent/created honors profile prompt and capability policy', () => {
+test('agent/created honors profile prompt and capability policy', async () => {
   const profile = tempProfile()
   const services = new Map()
   let created
@@ -91,11 +91,14 @@ test('agent/created honors profile prompt and capability policy', () => {
       },
     }
     created({ agent: bare, source: 'startup' })
+    const bareProfile = { id: 'bare', agentPreset: 'bare', capabilities: [] }
+    await services.get('agentExtensions').sessionReady({ agent: bare, profile: bareProfile })
     assert.deepEqual(restricted[0].deny, ['demo_tool'])
   } finally {
     for (const cleanup of cleanups) cleanup()
     fs.rmSync(profile, { recursive: true, force: true })
   }
 })
+
 
 

@@ -16,6 +16,7 @@ import { buildCapabilityBrief, installCapabilityPrompt } from './prompts/capabil
 import { installCreativePrompt } from './prompts/creative.prompt.js'
 import { installToolFailurePrompt } from './prompts/tool-failures.prompt.js'
 import { applyToolExposure } from './tool-exposure.js'
+import { LEGACY_CAPABILITY_BINDINGS } from './capability-bindings.js'
 
 export { AgentExtensionRegistry } from './agent-registry.js'
 export { AdapterHost } from './adapter-host.js'
@@ -113,6 +114,7 @@ export function apply(ctx, rawConfig = {}) {
 
   const profileRegistry = new ProfileRegistry(pluginRegistry.profiles())
   const managedCapabilities = [
+    ...LEGACY_CAPABILITY_BINDINGS,
     ...pluginRegistry.capabilities(),
     ...(Array.isArray(rawConfig.capabilityBindings) ? rawConfig.capabilityBindings : []),
   ]
@@ -140,14 +142,22 @@ export function apply(ctx, rawConfig = {}) {
       if (capabilitiesMode !== 'none') {
         installCapabilityPrompt(agent, state, capabilityBriefs[capabilitiesMode], log)
       }
-      applyToolExposure(agent, {
-        capabilities: managedCapabilities,
-        profile,
-      })
     })
     if (typeof offCreated === 'function') disposers.push(offCreated)
   } catch (error) {
     log('warn', `could not subscribe to agent/created: ${error?.message ?? error}`)
+  }
+
+  try {
+    disposers.push(registry.register({
+      name: 'platform:tool-exposure',
+      onSession: ({ agent, profile }) => applyToolExposure(agent, {
+        capabilities: managedCapabilities,
+        profile,
+      }),
+    }))
+  } catch (error) {
+    log('warn', `could not register tool exposure: ${error?.message ?? error}`)
   }
 
   const generation = {
