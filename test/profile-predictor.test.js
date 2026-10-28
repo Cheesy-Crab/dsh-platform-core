@@ -38,3 +38,27 @@ test('predictor stays quiet below the sample threshold', () => {
   assert.equal(predictor.predict({ agent: { session: { meta: { requester: 'qq:1', agentPreset: 'standard' } } } }), undefined)
   fs.rmSync(root, { recursive: true, force: true })
 })
+
+test('group prediction uses the group principal, not the sender', () => {
+  const { root, users, profiles, capabilities } = setup()
+  for (let i = 0; i < 4; i += 1) {
+    users.recordTurn({
+      userId: 'qq-group:99',
+      tools: [{ capabilityId: 'image.generate', outcome: 'success' }],
+    })
+  }
+  const predictor = createProfilePredictor({ profiles, userState: users, capabilities })
+  const predicted = predictor.predict({
+    agent: {
+      session: {
+        meta: {
+          requester: 'qq:1',
+          principal: 'qq-group:99',
+          agentPreset: 'standard',
+        },
+      },
+    },
+  })
+  assert.equal(predicted.id, 'image')
+  fs.rmSync(root, { recursive: true, force: true })
+})

@@ -18,7 +18,10 @@ export function createProfilePredictor({
   return {
     predict({ agent } = {}) {
       const meta = agent?.session?.meta ?? {}
-      const userId = meta.requester ?? meta.principal
+      const principal = String(meta.principal ?? '')
+      const userId = /^(qq-)?group:/.test(principal)
+        ? principal
+        : (meta.requester ?? meta.principal)
       if (!userId || !userState?.topCapabilities) return undefined
       const top = userState.topCapabilities(userId, { limit })
       const total = top.reduce((sum, item) => sum + item.calls, 0)

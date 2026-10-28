@@ -17,12 +17,14 @@ import { buildCapabilityBrief, installCapabilityPrompt } from './prompts/capabil
 import { installCreativePrompt } from './prompts/creative.prompt.js'
 import { installToolFailurePrompt } from './prompts/tool-failures.prompt.js'
 import { applyToolExposure, knownToolNames } from './tool-exposure.js'
+import { applyToolGuard } from './tool-guard.js'
 import { LEGACY_CAPABILITY_BINDINGS } from './capability-bindings.js'
 import { repairProfileCapabilities } from './capability-validation.js'
 import { expandCapabilityFamilies } from './capability-family.js'
 import { ProfileStateStore } from './profile-state.js'
 import { UserCapabilityStore } from './user-capability-state.js'
 import { createProfilePredictor } from './profile-predictor.js'
+import { PredictionLog } from './prediction-log.js'
 import { collectToolUsage, toolCapabilityMap } from './tool-usage.js'
 import { sessionEventsFrom } from './events.js'
 
@@ -128,6 +130,9 @@ export function apply(ctx, rawConfig = {}) {
   const userState = new UserCapabilityStore({
     root: rawConfig.userStateDir ?? path.join(process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh'), 'platform', 'users'),
   })
+  const predictionLog = new PredictionLog({
+    file: rawConfig.predictionLogFile ?? path.join(process.env.DSH_HOME ?? path.join(os.homedir(), '.dsh'), 'platform', 'predictions.jsonl'),
+  })
   const managedCapabilities = [
     ...pluginRegistry.capabilities(),
     ...(Array.isArray(rawConfig.capabilityBindings) ? rawConfig.capabilityBindings : []),
@@ -197,6 +202,14 @@ export function apply(ctx, rawConfig = {}) {
       if (effectiveProfile) agent.__platformProfile = effectiveProfile
       agent.__platformProfileSource = profileSource
       recordEffectiveProfile(agent, effectiveProfile, profileSource)
+      predictionLog.record({
+        sessionId: agent.session?.header?.id,
+        requester: agent.session?.meta?.requester,
+        principal: agent.session?.meta?.principal,
+        source: profileSource,
+        profileId: effectiveProfile?.id,
+        predictionError: predictionError?.message,
+      })
       const state = agent.__platformState ?? (agent.__platformState = {})
       if (platformPromptAllowed(effectiveProfile)) {
         installToolFailurePrompt(agent, state, log)
@@ -215,11 +228,19 @@ export function apply(ctx, rawConfig = {}) {
   try {
     disposers.push(registry.register({
       name: 'platform:tool-exposure',
-      onSession: ({ agent, profile }) => applyToolExposure(agent, {
-        capabilities: managedCapabilities,
-        profile: agent.__platformProfile ?? (profile?.id ? profile : undefined),
-        onError: (error, detail) => log('warn', `tool exposure failed: ${error?.message ?? error}; deny=${detail?.deny?.join(',') ?? ''}`),
-      }),
+      onSession: ({ agent, profile }) => {
+        const effective = agent.__platformProfile ?? (profile?.id ? profile : undefined)
+        applyToolExposure(agent, {
+          capabilities: managedCapabilities,
+          profile: effective,
+          onError: (error, detail) => log('warn', `tool exposure failed: ${error?.message ?? error}; deny=${detail?.deny?.join(',') ?? ''}`),
+        })
+        applyToolGuard(agent, {
+          capabilities: managedCapabilities,
+          profile: effective,
+          onError: (error) => log('warn', `tool guard failed: ${error?.message ?? error}`),
+        })
+      },
     }))
     disposers.push(registry.register({
       name: 'platform:profile-state',
@@ -243,6 +264,15 @@ export function apply(ctx, rawConfig = {}) {
         if (requester) {
           userState.recordTurn({
             userId: requester,
+            tools: usage,
+            profileId,
+            sessionId: session?.header?.id,
+          })
+        }
+        const group = String(state?.principal ?? session?.meta?.principal ?? '')
+        if (/^(qq-)?group:/.test(group) && group !== requester) {
+          userState.recordTurn({
+            userId: group,
             tools: usage,
             profileId,
             sessionId: session?.header?.id,
@@ -289,6 +319,7 @@ export function apply(ctx, rawConfig = {}) {
       capabilityCount: managedCapabilities.length,
       profileState,
       userState,
+      predictionLog,
       hostDescriptor,
     }))
   } catch (error) {
