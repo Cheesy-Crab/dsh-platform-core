@@ -86,12 +86,14 @@ function logSafely(log, level, message) {
  */
 export class DeliveryCoordinator {
   /**
-   * @param {{ log?: (level: string, message: string) => void }} [options]
+   * @param {{ log?: (level: string, message: string) => void, generationId?: string,
+   *   effectLedger?: object, generations?: object }} [options]
    */
-  constructor({ log, generationId, effectLedger } = {}) {
+  constructor({ log, generationId, effectLedger, generations } = {}) {
     this.log = log
     this.generationId = generationId
     this.effectLedger = effectLedger
+    this.generations = generations
     /**
      * Delivery records by key. A `pending` record owns the in-flight promise;
      * `failed` records are retryable tombstones kept so status can report them.
@@ -116,17 +118,22 @@ export class DeliveryCoordinator {
    * @param {string} input.surface
    * @param {unknown} [input.target] forwarded to `send` unchanged
    * @param {object} input.output
+   * @param {string} [input.generationId] per-session generation; stale ids are
+   *   rejected with `{ skipped: 'stale_generation' }` instead of being sent
+   * @param {{ pluginId?: string, activationId?: string, runtimeId?: string }} [input.owner]
+   *   adapter/plugin that owns the effect, recorded in the effect ledger
    * @param {(output: object, target: unknown) => unknown | Promise<unknown>} input.send
    * @returns {Promise<
    *   | { delivered: true, key: string, outputId: string, result: unknown }
    *   | { skipped: 'already_delivered', key: string, outputId: string }
+   *   | { skipped: 'stale_generation', key: null, outputId: string, generationId: string }
    * >} the caller's send result is returned as `result` on the first delivery;
    *   concurrent callers receive the same object. Duplicate deliveries return
    *   the skip marker without calling `send`.
    * @throws {TypeError} rejects when required identifiers are missing, `send`
    *   is not a function, or the output has no non-empty `id` / `path`.
    */
-  async deliver({ sessionId, turnId, surface, target, output, send } = {}) {
+  async deliver({ sessionId, turnId, surface, target, output, send, generationId, owner } = {}) {
     const sid = normalizeId(sessionId)
     const tid = normalizeId(turnId)
     const srf = normalizeId(surface)
@@ -135,7 +142,19 @@ export class DeliveryCoordinator {
     if (!srf) throw new TypeError('surface is required')
     if (typeof send !== 'function') throw new TypeError('send must be a function')
     const outputId = outputIdOf(output)
-    const key = this.keyFor(sid, tid, srf, outputId)
+    const requestedGeneration = normalizeId(generationId)
+
+    if (requestedGeneration && this.generations && !this.generations.isCurrent(sid, requestedGeneration)) {
+      const stale = this.generations.staleReason?.(sid, requestedGeneration)
+      logSafely(
+        this.log,
+        'warn',
+        `delivery rejected as stale: session=${sid} requested=${requestedGeneration} current=${stale?.current ?? 'unknown'}`,
+      )
+      return { skipped: 'stale_generation', key: null, outputId, generationId: requestedGeneration }
+    }
+
+    const key = this.keyFor(sid, tid, srf, outputId, requestedGeneration ?? this.generationId)
 
     const existing = this.deliveries.get(key)
     if (existing?.state === 'delivered') {
@@ -149,21 +168,21 @@ export class DeliveryCoordinator {
     // failed record is deliberately overwritten here: failures are retryable.
     const record = { state: 'pending', outputId }
     this.deliveries.set(key, record)
-    this.recordEffect('create', 'pending', key, outputId)
+    this.recordEffect('create', 'pending', key, outputId, undefined, owner)
 
     const promise = Promise.resolve().then(async () => {
       try {
         const result = await send(output, target)
         record.state = 'delivered'
         record.promise = undefined
-        this.recordEffect('release', 'delivered', key, outputId)
+        this.recordEffect('release', 'delivered', key, outputId, undefined, owner)
         logSafely(this.log, 'info', `delivered ${key}`)
         return { delivered: true, key, outputId, result }
       } catch (error) {
         record.state = 'failed'
         record.error = error
         record.promise = undefined
-        this.recordEffect('release', 'failed', key, outputId, error)
+        this.recordEffect('release', 'failed', key, outputId, error, owner)
         logSafely(this.log, 'warn', `delivery failed for ${key}: ${error?.message ?? error}`)
         throw error
       }
@@ -194,9 +213,16 @@ export class DeliveryCoordinator {
    *   included); `unknown` means no attempt is recorded, or an identifier is
    *   missing (then `key` is null).
    */
-  keyFor(sessionId, turnId, surface, outputId) {
+  /**
+   * @param {string | number} sessionId
+   * @param {string | number} turnId
+   * @param {string} surface
+   * @param {string} outputId
+   * @param {string} [generationId] overrides the coordinator's generation
+   */
+  keyFor(sessionId, turnId, surface, outputId, generationId = this.generationId) {
     return [
-      ...(this.generationId ? [this.generationId] : []),
+      ...(generationId ? [generationId] : []),
       sessionId,
       turnId,
       surface,
@@ -204,10 +230,14 @@ export class DeliveryCoordinator {
     ].join('|')
   }
 
-  recordEffect(operation, state, effectId, resourceId, error) {
+  recordEffect(operation, state, effectId, resourceId, error, owner) {
     try {
       this.effectLedger?.record({
-        owner: { pluginId: 'platform-core', activationId: this.generationId },
+        owner: {
+          pluginId: owner?.pluginId ?? 'platform-core',
+          activationId: owner?.activationId ?? this.generationId,
+          ...(owner?.runtimeId ? { runtimeId: owner.runtimeId } : {}),
+        },
         effectId,
         effectKind: 'media.delivery',
         operation,

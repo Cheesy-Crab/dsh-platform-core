@@ -1,6 +1,6 @@
 {
   "name": "@dsh/platform-core",
-  "version": "0.53.0",
+  "version": "0.54.0",
   "description": "Surface-neutral DSH platform core: capability registry, plugin adapter, prompt policy and media delivery.",
   "type": "module",
   "main": "./src/index.js",
@@ -21,6 +21,7 @@
     "./status": "./src/status.js",
     "./fabric": "./src/fabric.js",
     "./effect-ledger": "./src/effect-ledger.js",
+    "./generation": "./src/generation.js",
     "./tool-exposure": "./src/tool-exposure.js",
     "./capability-bindings": "./src/capability-bindings.js",
     "./profile-state": "./src/profile-state.js",

@@ -70,10 +70,29 @@ test('agent/created honors profile prompt and capability policy', async () => {
     assert.deepEqual(tavern, [])
 
     const normal = []
-    created({ agent: fakeAgent(normal, { agentPreset: 'default' }), source: 'startup' })
+    const normalAgent = fakeAgent(normal, { agentPreset: 'default' })
+    normalAgent.session.header = { id: 'sess-normal' }
+    created({ agent: normalAgent, source: 'startup' })
     assert.ok(normal.includes('platform:creative'))
     assert.ok(normal.includes('platform:tool-failures'))
     assert.ok(normal.includes('platform:capabilities'))
+
+    const firstGeneration = normalAgent.session.meta.generationId
+    assert.equal(typeof firstGeneration, 'string')
+
+    const resumed = fakeAgent([], { agentPreset: 'default' })
+    resumed.session.header = { id: 'sess-normal' }
+    created({ agent: resumed, source: 'startup' })
+    assert.equal(resumed.session.meta.generationId, firstGeneration)
+
+    const switched = fakeAgent([], { agentPreset: 'tavern', profileId: 'tavern' })
+    switched.session.header = { id: 'sess-normal' }
+    created({ agent: switched, source: 'startup' })
+    assert.notEqual(switched.session.meta.generationId, firstGeneration)
+
+    const generations = services.get('platformGenerations')
+    assert.ok(generations)
+    assert.equal(generations.current('sess-normal').id, switched.session.meta.generationId)
 
     const child = []
     created({ agent: { parent: {}, ctx: { systemPrompt: { section: (v) => child.push(v.name) } }, session: { meta: {} } }, source: 'subagent' })

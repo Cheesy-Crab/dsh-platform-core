@@ -153,9 +153,10 @@ function writeLog(log, level, message) {
  * create one per turn when only turn-scoped memory is wanted.
  */
 export class InvocationLedger {
-  constructor({ log, generationId } = {}) {
+  constructor({ log, generationId, generations } = {}) {
     this.log = typeof log === 'function' ? log : undefined
     this.generationId = generationId
+    this.generations = generations
     /** @type {Map<string, object>} key -> invocation entry */
     this.entries = new Map()
     /** @type {Map<string, object>} capability key -> mutex entry */
@@ -173,13 +174,27 @@ export class InvocationLedger {
    * @param {string} [input.capabilityId] exclusive capability identity; falls
    *   back to `tool` when omitted
    * @param {boolean} [input.exclusive] take the per-turn capability mutex
+   * @param {string} [input.generationId] per-session generation; a retired id
+   *   is rejected with `reason: 'stale_generation'`
    * @returns {object} one of the documented claim results
    */
-  claim({ sessionId, turnId, tool, args, capabilityId, exclusive } = {}) {
+  claim({ sessionId, turnId, tool, args, capabilityId, exclusive, generationId } = {}) {
     const session = requireId('sessionId', sessionId)
     const turn = requireId('turnId', turnId)
     const toolName = requireId('tool', tool)
-    const prefix = this.generationId ? `${this.generationId}|` : ''
+    const requestedGeneration = typeof generationId === 'string' && generationId.length > 0
+      ? generationId
+      : undefined
+    if (requestedGeneration && this.generations && !this.generations.isCurrent(session, requestedGeneration)) {
+      writeLog(
+        this.log,
+        'warn',
+        `invocation rejected as stale: ${toolName} session=${session} requested=${requestedGeneration}`,
+      )
+      return { ok: false, reason: 'stale_generation', key: null, sessionId: session, generationId: requestedGeneration }
+    }
+    const scopedGeneration = requestedGeneration ?? this.generationId
+    const prefix = scopedGeneration ? `${scopedGeneration}|` : ''
     const key = `${prefix}${session}|${turn}|${toolName}|${sha256(normalizeArgs(args))}`
     const regenerate = regenerateRequested(args)
     const exclusiveMode = Boolean(exclusive)

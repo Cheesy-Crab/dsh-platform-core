@@ -3,10 +3,11 @@
  * revisions rather than plugin internals, so it can be exposed over HTTP or a
  * remote method without leaking prompts or credentials.
  */
-export function createPlatformStatus({ pluginRegistry, profileRegistry, deliveryCoordinator, invocationLedger, effectLedger, generation, hostDescriptor, capabilityCount, profileState, userState, predictionLog } = {}) {
+export function createPlatformStatus({ pluginRegistry, profileRegistry, deliveryCoordinator, invocationLedger, effectLedger, generation, generations, hostDescriptor, capabilityCount, profileState, userState, predictionLog } = {}) {
   return () => ({
     ...(hostDescriptor ? { host: hostDescriptor } : {}),
     ...(generation ? { generation } : {}),
+    ...(generations ? { generations: generations.stats() } : {}),
     ...(effectLedger ? { effects: effectLedger.stats() } : {}),
     ...(profileState ? { profileState: profileState.stats() } : {}),
     ...(userState ? { userState: userState.stats() } : {}),

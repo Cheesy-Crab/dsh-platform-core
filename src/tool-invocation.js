@@ -11,7 +11,8 @@ function turnIdFor(exec) {
  * - same session/turn/tool/args runs once;
  * - a concurrent duplicate joins the owner;
  * - a completed duplicate reuses its result;
- * - failures release the claim so a retry can run.
+ * - failures release the claim so a retry can run;
+ * - a call from a retired session generation is rejected.
  */
 export function createToolInvocationHandler({ invocationLedger, toolCapabilities = new Map(), log } = {}) {
   return async function toolInvocationHandler(exec, next) {
@@ -27,6 +28,7 @@ export function createToolInvocationHandler({ invocationLedger, toolCapabilities
       args: exec.arguments,
       capabilityId: toolCapabilities.get(tool),
       exclusive: false,
+      generationId: session?.meta?.generationId,
     })
 
     if (claim.ok === true) {

@@ -7,6 +7,7 @@ import { AgentExtensionRegistry } from './agent-registry.js'
 import { AdapterHost } from './adapter-host.js'
 import { DeliveryCoordinator } from './delivery-coordinator.js'
 import { EffectLedger } from './effect-ledger.js'
+import { GenerationRegistry, capabilitySignature } from './generation.js'
 import { InvocationLedger } from './invocation-ledger.js'
 import { createPlatformStatus } from './status.js'
 import { createHostDescriptor, fabricCompatibility } from './fabric.js'
@@ -38,6 +39,7 @@ export { discoverPlugins, inventoryFromLoader, PluginRegistry } from './registry
 export { forwardMediaOutputs, generatedImageRecords, generatedImages } from './delivery.js'
 export { DeliveryCoordinator } from './delivery-coordinator.js'
 export { EffectLedger } from './effect-ledger.js'
+export { GenerationRegistry, capabilitySignature } from './generation.js'
 export { InvocationLedger } from './invocation-ledger.js'
 export { createPlatformStatus } from './status.js'
 export { createHostDescriptor, fabricCompatibility, negotiateCapabilities, satisfiesVersion, toFabricManifest } from './fabric.js'
@@ -85,6 +87,7 @@ export function apply(ctx, rawConfig = {}) {
   }
 
   const disposers = []
+  const generations = new GenerationRegistry({ log })
   try {
     disposers.push(registry.register({
       name: 'platform:tool-failures',
@@ -202,6 +205,16 @@ export function apply(ctx, rawConfig = {}) {
         : repaired.profile
       if (effectiveProfile) agent.__platformProfile = effectiveProfile
       agent.__platformProfileSource = profileSource
+      const sessionId = agent.session?.header?.id ?? agent.session?.id
+      const generation = generations.forSession(sessionId, {
+        profileId: effectiveProfile?.id,
+        capabilitySignature: capabilitySignature(effectiveProfile),
+        reason: 'agent-created',
+      })
+      if (generation) {
+        agent.__platformGeneration = generation
+        if (agent.session?.meta) agent.session.meta.generationId = generation.id
+      }
       recordEffectiveProfile(agent, effectiveProfile, profileSource)
       predictionLog.record({
         sessionId: agent.session?.header?.id,
@@ -290,8 +303,8 @@ export function apply(ctx, rawConfig = {}) {
     startedAt: new Date().toISOString(),
   }
   const effectLedger = new EffectLedger({ generationId: generation.id, log })
-  const deliveryCoordinator = new DeliveryCoordinator({ log, generationId: generation.id, effectLedger })
-  const invocationLedger = new InvocationLedger({ log, generationId: generation.id })
+  const deliveryCoordinator = new DeliveryCoordinator({ log, generationId: generation.id, effectLedger, generations })
+  const invocationLedger = new InvocationLedger({ log, generationId: generation.id, generations })
   try {
     const toolCapabilities = toolCapabilityMap(managedCapabilities)
     disposers.push(ctx.on('tools/execute', createToolInvocationHandler({
@@ -306,12 +319,13 @@ export function apply(ctx, rawConfig = {}) {
     ctx.provide('deliveryCoordinator', deliveryCoordinator)
     ctx.provide('invocationLedger', invocationLedger)
     ctx.provide('platformGeneration', generation)
+    ctx.provide('platformGenerations', generations)
     ctx.provide('effectLedger', effectLedger)
   } catch (error) {
     log('warn', `could not provide delivery/generation services: ${error?.message ?? error}`)
   }
 
-  const adapterHost = new AdapterHost({ ctx, registry, profiles: profileRegistry, deliveryCoordinator, invocationLedger, log })
+  const adapterHost = new AdapterHost({ ctx, registry, profiles: profileRegistry, deliveryCoordinator, invocationLedger, effectLedger, generations, log })
   const hostDescriptor = createHostDescriptor({
     contract: '1.2',
     surfaces: ['qq', 'web'],
@@ -327,6 +341,7 @@ export function apply(ctx, rawConfig = {}) {
       invocationLedger,
       effectLedger,
       generation,
+      generations,
       capabilityCount: managedCapabilities.length,
       profileState,
       userState,

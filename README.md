@@ -1,4 +1,4 @@
-﻿# dsh-platform-core
+# dsh-platform-core
 
 Surface-neutral runtime for DSH: the platform is the person, plugins are its abilities. QQ, Web, Telegram and other communication surfaces are optional adapters; the core never knows which one is in use.
 
@@ -44,6 +44,15 @@ The plugin provides:
 |---|---|
 | `agentExtensions` | shared session/turn extension registry |
 | `pluginRegistry` | discovered plugins and inferred capabilities |
+| `conversationProfiles` | manifest/profile registry |
+| `profileState` / `userCapabilityState` | persistent usage stats |
+| `profilePredictor` | default profile from user stats |
+| `deliveryCoordinator` | at-most-once media delivery |
+| `invocationLedger` | at-most-once tool execution |
+| `effectLedger` | effect ownership records |
+| `platformGeneration` / `platformGenerations` | process generation / per-session generation boundaries |
+| `adapterHost` | composition root for communication adapters |
+| `platformStatus` | read-only health snapshot |
 
 Communication adapters should consume these services instead of creating their own registry.
 
@@ -109,6 +118,33 @@ Native `meta.dsh` wins; legacy `savedTo` / `cost.total` are adapted during migra
 }
 ```
 
+## Generation boundaries
+
+A session's generation is the assembly of effective profile + capability set that
+produced it. It is recorded once at `agent/created` and stored as
+`session.meta.generationId`; the registry keeps the per-session current id.
+
+```text
+new session            → new generation
+same session, resume   → reused
+profile change         → new generation (profile-switch)
+capability set change  → new generation (capability-switch)
+```
+
+`DeliveryCoordinator.deliver({ generationId })` and `InvocationLedger.claim({ generationId })`
+reject a retired id explicitly (`skipped: 'stale_generation'` / `reason: 'stale_generation'`)
+instead of replaying it. A missing id falls back to the process generation so pre-upgrade
+sessions keep working.
+
+Adapters get an owner identity from `AdapterHost.mount()`:
+
+```js
+host.owner // { pluginId, activationId }
+```
+
+The effect ledger records adapter `create` on mount, `release` on dispose, and
+`cleanup-failed` when `stop()` throws. Delivery effects record the same owner.
+
 ## Design rules
 
 - The core MUST NOT import QQ, NapCat, OneBot or any surface adapter.
@@ -125,7 +161,8 @@ node --test --test-force-exit
 
 ## Status
 
-`0.41.0` — extracted from the QQ bridge so the core can run without QQ.
+`0.54.0` — per-session generation boundaries, adapter owner identities and
+cleanup-failed recording on top of the extracted core.
 
 ## License
 

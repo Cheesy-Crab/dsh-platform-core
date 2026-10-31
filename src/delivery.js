@@ -72,6 +72,8 @@ export async function forwardMediaOutputs({
   sessionId,
   turnId,
   surface,
+  generationId,
+  owner,
 }) {
   const records = generatedImageRecords(session, fromSeq, log)
   const presented = new Set(presentedFor?.(session, fromSeq, log) ?? [])
@@ -79,6 +81,7 @@ export async function forwardMediaOutputs({
   const resolvedSessionId = sessionId ?? session?.header?.id ?? session?.id ?? 'unknown'
   const resolvedTurnId = turnId ?? fromSeq ?? 'turn'
   const resolvedSurface = surface ?? chat?.type ?? 'default'
+  const resolvedGenerationId = generationId ?? session?.meta?.generationId
   for (const record of records) {
     const isPresented = presented.has(record.file)
     const options = optionsForChat?.(chat) ?? {}
@@ -126,7 +129,13 @@ export async function forwardMediaOutputs({
           target: chat,
           output: { path: record.file },
           send: async () => deliver(),
+          ...(resolvedGenerationId ? { generationId: resolvedGenerationId } : {}),
+          ...(owner ? { owner } : {}),
         })
+        if (result?.skipped === 'stale_generation') {
+          log?.('warn', `skipped generated image from retired generation ${record.file}`)
+          continue
+        }
         if (result?.skipped) continue
         file = result?.result
       } else {
